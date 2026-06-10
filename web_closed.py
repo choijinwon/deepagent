@@ -1,5 +1,7 @@
 import json
 import os
+import re
+from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -15,6 +17,7 @@ PORT = int(os.getenv("WEB_PORT", "8000"))
 DEFAULT_MODEL = get_default_model()
 MODEL_OPTIONS = get_available_models()
 PROMPT_STORE_PATH = Path(os.getenv("PROMPT_STORE_PATH", "prompt_templates.json"))
+WIKI_LOG_DIR = Path(os.getenv("WIKI_LOG_DIR", "wiki_logs"))
 
 HTML = """<!doctype html>
 <html lang="ko">
@@ -292,7 +295,7 @@ HTML = """<!doctype html>
           multi_agent: multiAgent.checked,
         });
         result.textContent = data.result;
-        statusText.textContent = "완료";
+        statusText.textContent = data.wiki_path ? `완료 / 기록 저장: ${data.wiki_path}` : "완료";
       } catch (error) {
         result.textContent = `오류: ${error.message}`;
         statusText.textContent = "실패";
@@ -448,6 +451,89 @@ def save_prompt_store(prompts: list[dict[str, str]]) -> None:
     )
 
 
+def slugify(value: str) -> str:
+    normalized = re.sub(r"[^0-9A-Za-z가-힣_-]+", "-", value.strip())
+    normalized = re.sub(r"-+", "-", normalized).strip("-")
+    return normalized[:60] or "run"
+
+
+def markdown_escape(value: str) -> str:
+    return value.replace("|", "\\|").strip()
+
+
+def save_wiki_record(
+    *,
+    prompt: str,
+    result: str,
+    model_name: str,
+    enable_multi_agent: bool,
+) -> str:
+    now = datetime.now()
+    day = now.strftime("%Y-%m-%d")
+    timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
+    filename = f"{now.strftime('%H%M%S')}-{slugify(prompt)}.md"
+    day_dir = WIKI_LOG_DIR / day
+    day_dir.mkdir(parents=True, exist_ok=True)
+    record_path = day_dir / filename
+
+    record_path.write_text(
+        "\n".join(
+            [
+                f"# {prompt[:80]}",
+                "",
+                "## Metadata",
+                "",
+                f"- Created: {timestamp}",
+                f"- Model: {model_name}",
+                f"- Multi Agent: {'enabled' if enable_multi_agent else 'disabled'}",
+                "",
+                "## Prompt",
+                "",
+                prompt,
+                "",
+                "## Result",
+                "",
+                result,
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    rebuild_wiki_index()
+    return record_path.as_posix()
+
+
+def rebuild_wiki_index() -> None:
+    WIKI_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    lines = [
+        "# DeepAgents 실행 기록 Wiki",
+        "",
+        "## Tree",
+        "",
+        "```text",
+        "wiki_logs/",
+    ]
+
+    day_dirs = sorted([path for path in WIKI_LOG_DIR.iterdir() if path.is_dir()], reverse=True)
+    for day_dir in day_dirs:
+        lines.append(f"├─ {day_dir.name}/")
+        records = sorted(day_dir.glob("*.md"), reverse=True)
+        for index, record in enumerate(records):
+            prefix = "└─" if index == len(records) - 1 else "├─"
+            lines.append(f"│  {prefix} {record.name}")
+    lines.extend(["```", "", "## Records", ""])
+
+    for day_dir in day_dirs:
+        lines.extend([f"### {day_dir.name}", ""])
+        for record in sorted(day_dir.glob("*.md"), reverse=True):
+            relative = record.relative_to(WIKI_LOG_DIR).as_posix()
+            title = record.stem.split("-", 1)[-1].replace("-", " ")
+            lines.append(f"- [{markdown_escape(title)}]({relative})")
+        lines.append("")
+
+    (WIKI_LOG_DIR / "index.md").write_text("\n".join(lines), encoding="utf-8")
+
+
 class AgentHandler(BaseHTTPRequestHandler):
     agents = {}
 
@@ -509,7 +595,16 @@ class AgentHandler(BaseHTTPRequestHandler):
                     ]
                 }
             )
-            self._send_json({"result": format_agent_result(response)})
+            result_text = format_agent_result(response)
+            wiki_path = None
+            if self.path == "/api/run":
+                wiki_path = save_wiki_record(
+                    prompt=prompt,
+                    result=result_text,
+                    model_name=model_name,
+                    enable_multi_agent=enable_multi_agent,
+                )
+            self._send_json({"result": result_text, "wiki_path": wiki_path})
         except Exception as exc:
             self._send_json({"error": str(exc)}, HTTPStatus.INTERNAL_SERVER_ERROR)
 

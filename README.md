@@ -157,6 +157,7 @@ ENABLE_MULTI_AGENT=true
 WEB_HOST=127.0.0.1
 WEB_PORT=8000
 PROMPT_STORE_PATH=prompt_templates.json
+WIKI_LOG_DIR=wiki_logs
 ```
 
 `QWEN_BASE_URL`에 `/v1`이 붙는지 반드시 확인하세요.
@@ -248,6 +249,24 @@ ENABLE_MULTI_AGENT=false
 PROMPT_STORE_PATH=prompt_templates.json
 ```
 
+웹에서 `실행` 버튼으로 생성한 결과는 위키트리 형식의 Markdown 기록으로 자동 저장됩니다.
+기본 저장 폴더는 `wiki_logs/`입니다.
+
+```text
+wiki_logs/
+├─ index.md
+└─ 2026-06-11/
+   ├─ 101530-서버-접근권한-보안-점검-TODO-만들어줘.md
+   └─ 102010-보안-점검-보고서-초안.md
+```
+
+`wiki_logs/index.md`에는 날짜별 실행 기록 트리와 각 Markdown 문서 링크가 자동으로 갱신됩니다.
+저장 위치를 바꾸려면 `.env`에서 아래 값을 수정합니다.
+
+```ini
+WIKI_LOG_DIR=wiki_logs
+```
+
 ## 실패 시 먼저 확인
 
 패키지 import를 확인합니다.
@@ -277,4 +296,5 @@ curl http://xxx.xxx.xxx.xxx:포트/v1/models
 
 `.env` 파일은 민감 정보가 포함되므로 Git에 올리지 않습니다.
 `prompt_templates.json`은 사용자별 프롬프트 저장 파일이므로 Git에 올리지 않습니다.
+`wiki_logs/`는 실행 기록 폴더이므로 Git에 올리지 않습니다.
 `offline_packages/`는 용량이 크고 환경별 wheel이 섞일 수 있으므로 Git에 올리지 않습니다.
