@@ -1,6 +1,7 @@
 # DeepAgents 폐쇄망 Kwan API 연동 PoC
 
 폐쇄망 내부에서 OpenAI 호환 Kwan API 서버를 `deepagents`의 LLM 백엔드로 연결하는 PoC 예제입니다.
+설치와 실행 명령은 Windows 11 Pro / PowerShell 기준입니다.
 
 핵심은 다음 4가지입니다.
 
@@ -87,6 +88,12 @@ python -m venv .venv
 ## 4. 폐쇄망 PC에서 오프라인 설치
 
 `offline_packages` 폴더가 `deepagent` 폴더와 같은 위치에 있다고 가정합니다.
+
+PowerShell 실행 정책 때문에 `.ps1` 실행이 막히면 현재 PowerShell 창에서만 아래 명령으로 임시 허용합니다.
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
 
 ```powershell
 .\scripts\install_offline.ps1
