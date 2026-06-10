@@ -151,12 +151,28 @@ copy .env.example .env
 ```ini
 KWAN_API_KEY=your-internal-kwan-key
 KWAN_BASE_URL=http://xxx.xxx.xxx.xxx:포트/v1
-KWAN_MODEL=kwan-model-name
+KWAN_MODEL=qwen3.5
 WEB_HOST=127.0.0.1
 WEB_PORT=8000
 ```
 
 `KWAN_BASE_URL`에 `/v1`이 붙는지 반드시 확인하세요.
+
+사용 가능한 Kwan 모델명이 아래와 같다면 `KWAN_MODEL` 값만 바꿔서 실행합니다.
+
+```ini
+KWAN_MODEL=qwen3.5
+```
+
+```ini
+KWAN_MODEL=gpt20
+```
+
+```ini
+KWAN_MODEL=gamma
+```
+
+DeepAgents는 Tool Calling 가능한 Chat Model을 전제로 동작하므로, 먼저 `qwen3.5`로 테스트하고 Tool Calling 오류가 나면 `gpt20` 또는 `gamma`로 바꿔 확인하세요.
 
 ## 6. 실행
 
