@@ -3,7 +3,7 @@ import os
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from app_closed import build_agent
+from app_closed import build_agent, get_available_models, get_default_model
 from dotenv import load_dotenv
 
 
@@ -11,6 +11,8 @@ load_dotenv()
 
 HOST = os.getenv("WEB_HOST", "127.0.0.1")
 PORT = int(os.getenv("WEB_PORT", "8000"))
+DEFAULT_MODEL = get_default_model()
+MODEL_OPTIONS = get_available_models()
 
 HTML = """<!doctype html>
 <html lang="ko">
@@ -74,6 +76,33 @@ HTML = """<!doctype html>
       font: inherit;
       line-height: 1.5;
     }
+    .controls {
+      display: grid;
+      grid-template-columns: minmax(180px, 260px) 1fr;
+      gap: 14px;
+      align-items: end;
+      margin-bottom: 14px;
+    }
+    select {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      background: #ffffff;
+      font: inherit;
+    }
+    .toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 41px;
+      font-weight: 700;
+    }
+    .toggle input {
+      width: 18px;
+      height: 18px;
+    }
     .actions {
       display: flex;
       align-items: center;
@@ -111,6 +140,11 @@ HTML = """<!doctype html>
       font-family: "Cascadia Mono", Consolas, monospace;
       font-size: 14px;
     }
+    @media (max-width: 680px) {
+      .controls {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
@@ -120,6 +154,16 @@ HTML = """<!doctype html>
       <div class="subtitle">외부 검색 없이 내부 Qwen 3.5 API와 등록된 사내 Tool만 사용합니다.</div>
     </header>
     <section>
+      <div class="controls">
+        <div>
+          <label for="model">모델 선택</label>
+          <select id="model"></select>
+        </div>
+        <label class="toggle" for="multiAgent">
+          <input id="multiAgent" type="checkbox" checked>
+          멀티에이전트 사용
+        </label>
+      </div>
       <label for="prompt">요청 내용</label>
       <textarea id="prompt">서버 접근권한 보안 점검 TODO 만들어줘.</textarea>
       <div class="actions">
@@ -133,7 +177,24 @@ HTML = """<!doctype html>
     const button = document.getElementById("run");
     const statusText = document.getElementById("status");
     const promptInput = document.getElementById("prompt");
+    const modelSelect = document.getElementById("model");
+    const multiAgent = document.getElementById("multiAgent");
     const result = document.getElementById("result");
+
+    async function loadModels() {
+      const response = await fetch("/api/models");
+      const data = await response.json();
+      modelSelect.innerHTML = "";
+      for (const model of data.models) {
+        const option = document.createElement("option");
+        option.value = model;
+        option.textContent = model;
+        if (model === data.default_model) {
+          option.selected = true;
+        }
+        modelSelect.appendChild(option);
+      }
+    }
 
     button.addEventListener("click", async () => {
       const prompt = promptInput.value.trim();
@@ -150,7 +211,11 @@ HTML = """<!doctype html>
         const response = await fetch("/api/run", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt }),
+          body: JSON.stringify({
+            prompt,
+            model: modelSelect.value,
+            multi_agent: multiAgent.checked,
+          }),
         });
         const data = await response.json();
         if (!response.ok) {
@@ -164,6 +229,10 @@ HTML = """<!doctype html>
       } finally {
         button.disabled = false;
       }
+    });
+
+    loadModels().catch((error) => {
+      result.textContent = `모델 목록 로드 실패: ${error.message}`;
     });
   </script>
 </body>
@@ -185,9 +254,17 @@ def format_agent_result(result) -> str:
 
 
 class AgentHandler(BaseHTTPRequestHandler):
-    agent = None
+    agents = {}
 
     def do_GET(self) -> None:
+        if self.path == "/api/models":
+            self._send_json(
+                {
+                    "models": MODEL_OPTIONS,
+                    "default_model": DEFAULT_MODEL,
+                }
+            )
+            return
         if self.path not in ("/", "/index.html"):
             self.send_error(HTTPStatus.NOT_FOUND)
             return
@@ -202,11 +279,17 @@ class AgentHandler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
             prompt = str(payload.get("prompt", "")).strip()
+            model_name = str(payload.get("model") or DEFAULT_MODEL).strip()
+            enable_multi_agent = bool(payload.get("multi_agent", True))
             if not prompt:
                 self._send_json({"error": "prompt 값이 비어 있습니다."}, HTTPStatus.BAD_REQUEST)
                 return
+            if model_name not in MODEL_OPTIONS:
+                self._send_json({"error": f"등록되지 않은 모델입니다: {model_name}"}, HTTPStatus.BAD_REQUEST)
+                return
 
-            response = self.agent.invoke(
+            agent = self._get_agent(model_name, enable_multi_agent)
+            response = agent.invoke(
                 {
                     "messages": [
                         {
@@ -239,11 +322,21 @@ class AgentHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    @classmethod
+    def _get_agent(cls, model_name: str, enable_multi_agent: bool):
+        cache_key = (model_name, enable_multi_agent)
+        if cache_key not in cls.agents:
+            cls.agents[cache_key] = build_agent(
+                model_name=model_name,
+                enable_multi_agent=enable_multi_agent,
+            )
+        return cls.agents[cache_key]
+
 
 def main() -> None:
-    AgentHandler.agent = build_agent()
     server = ThreadingHTTPServer((HOST, PORT), AgentHandler)
     print(f"[폐쇄망 웹 모드] http://{HOST}:{PORT} 에서 실행 중입니다.")
+    print(f"등록 모델: {', '.join(MODEL_OPTIONS)}")
     print("종료하려면 Ctrl+C를 누르세요.")
     server.serve_forever()
 

@@ -1,4 +1,5 @@
 import os
+from typing import Any
 
 from deepagents import create_deep_agent
 from dotenv import load_dotenv
@@ -6,12 +7,31 @@ from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 
 
-def build_qwen_llm() -> ChatOpenAI:
+DEFAULT_MODELS = ["qwen3.5", "gpt20", "gamma"]
+
+
+def get_available_models() -> list[str]:
+    load_dotenv()
+
+    raw_models = os.getenv("QWEN_MODELS", ",".join(DEFAULT_MODELS))
+    models = [model.strip() for model in raw_models.split(",") if model.strip()]
+    default_model = os.getenv("QWEN_MODEL")
+    if default_model and default_model not in models:
+        models.insert(0, default_model)
+    return models or DEFAULT_MODELS
+
+
+def get_default_model() -> str:
+    load_dotenv()
+    return os.getenv("QWEN_MODEL") or get_available_models()[0]
+
+
+def build_qwen_llm(model_name: str | None = None) -> ChatOpenAI:
     load_dotenv()
 
     api_key = os.getenv("QWEN_API_KEY")
     base_url = os.getenv("QWEN_BASE_URL")
-    model_name = os.getenv("QWEN_MODEL", "qwen3.5")
+    selected_model = model_name or get_default_model()
 
     if not api_key:
         raise ValueError("QWEN_API_KEY가 설정되지 않았습니다. .env 파일을 확인하세요.")
@@ -19,7 +39,7 @@ def build_qwen_llm() -> ChatOpenAI:
         raise ValueError("QWEN_BASE_URL이 설정되지 않았습니다. .env 파일을 확인하세요.")
 
     return ChatOpenAI(
-        model=model_name,
+        model=selected_model,
         api_key=api_key,
         base_url=base_url,
         temperature=0.2,
@@ -46,22 +66,53 @@ INSTRUCTIONS = """
 외부 인터넷, 외부 API, 웹 검색 도구는 절대 사용하지 않는다.
 내부 Qwen 3.5 OpenAI 호환 API와 등록된 사내 Tool만 사용한다.
 결과는 업무자가 바로 사용할 수 있게 TODO, 체크리스트, 보고서 형식으로 작성한다.
+멀티에이전트 모드에서는 필요 시 task 도구로 전문 서브에이전트에게 분석을 위임한다.
 """
 
 
-def build_agent():
-    qwen_llm = build_qwen_llm()
+def build_subagents() -> list[dict[str, Any]]:
+    return [
+        {
+            "name": "security-checker",
+            "description": "접근권한, 로그, 취약점 조치 여부를 기준으로 보안 점검 항목을 분석한다.",
+            "system_prompt": """
+너는 폐쇄망 내부 보안 점검 전문 서브에이전트다.
+외부 인터넷과 외부 API는 사용하지 않는다.
+점검 대상, 권한, 로그, 취약점 조치, 담당자 확인 관점으로 누락 항목을 찾아 체크리스트로 정리한다.
+""",
+            "tools": [make_security_todo],
+        },
+        {
+            "name": "report-writer",
+            "description": "보안 점검 결과를 업무자가 바로 사용할 수 있는 보고서와 TODO 형식으로 정리한다.",
+            "system_prompt": """
+너는 폐쇄망 내부 보고서 작성 전문 서브에이전트다.
+외부 인터넷과 외부 API는 사용하지 않는다.
+분석 내용을 요약, TODO, 담당자 확인 사항, 후속 조치 형식으로 명확하게 작성한다.
+""",
+            "tools": [make_security_todo],
+        },
+    ]
+
+
+def build_agent(model_name: str | None = None, enable_multi_agent: bool = True):
+    qwen_llm = build_qwen_llm(model_name)
+    subagents = build_subagents() if enable_multi_agent else []
     return create_deep_agent(
         model=qwen_llm,
         tools=[make_security_todo],
-        instructions=INSTRUCTIONS,
+        system_prompt=INSTRUCTIONS,
+        subagents=subagents,
     )
 
 
 def main() -> None:
-    agent = build_agent()
+    model_name = get_default_model()
+    enable_multi_agent = os.getenv("ENABLE_MULTI_AGENT", "true").lower() in ("1", "true", "yes", "y")
+    agent = build_agent(model_name=model_name, enable_multi_agent=enable_multi_agent)
 
-    print("[폐쇄망 안전 모드] 딥에이전트가 내부 Qwen 3.5 API와 통신을 시작합니다...")
+    print(f"[폐쇄망 안전 모드] 딥에이전트가 내부 Qwen API 모델({model_name})과 통신을 시작합니다...")
+    print(f"멀티에이전트 모드: {'사용' if enable_multi_agent else '미사용'}")
 
     try:
         result = agent.invoke(
@@ -81,5 +132,7 @@ def main() -> None:
     except Exception as exc:
         print("\n연결 실패: Qwen 3.5 API 주소나 모델명을 확인하세요.")
         print(f"오류 내용: {exc}")
+
+
 if __name__ == "__main__":
     main()

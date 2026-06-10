@@ -152,13 +152,27 @@ copy .env.example .env
 QWEN_API_KEY=your-internal-qwen-key
 QWEN_BASE_URL=http://xxx.xxx.xxx.xxx:포트/v1
 QWEN_MODEL=qwen3.5
+QWEN_MODELS=qwen3.5,gpt20,gamma
+ENABLE_MULTI_AGENT=true
 WEB_HOST=127.0.0.1
 WEB_PORT=8000
 ```
 
 `QWEN_BASE_URL`에 `/v1`이 붙는지 반드시 확인하세요.
 
-사용 가능한 모델명이 아래와 같다면 `QWEN_MODEL` 값만 바꿔서 실행합니다.
+콘솔 기본 실행 모델은 `QWEN_MODEL`로 지정합니다.
+
+```ini
+QWEN_MODEL=qwen3.5
+```
+
+웹 화면에서 선택 가능한 모델 목록은 `QWEN_MODELS`에 쉼표로 등록합니다.
+
+```ini
+QWEN_MODELS=qwen3.5,gpt20,gamma
+```
+
+사용 가능한 모델명이 아래와 같다면 웹에서 드롭다운으로 선택할 수 있습니다.
 
 ```ini
 QWEN_MODEL=qwen3.5
@@ -188,7 +202,7 @@ python app_closed.py
 agent = create_deep_agent(
     model=qwen_llm,
     tools=[make_security_todo],
-    instructions=INSTRUCTIONS,
+    system_prompt=INSTRUCTIONS,
 )
 ```
 
@@ -207,6 +221,19 @@ http://127.0.0.1:8000
 ```
 
 다른 PC에서 접속해야 하는 내부 테스트 환경이면 `.env`에서 `WEB_HOST`를 `0.0.0.0`으로 바꾸고 Windows 방화벽 인바운드 규칙에서 해당 포트를 허용하세요.
+
+웹 화면에서는 `.env`의 `QWEN_MODELS`에 등록된 모델을 드롭다운으로 선택할 수 있습니다.
+
+멀티에이전트 사용을 켜면 메인 에이전트가 필요할 때 아래 서브에이전트로 작업을 위임합니다.
+
+- `security-checker`: 접근권한, 로그, 취약점 조치 여부를 기준으로 보안 점검 항목 분석
+- `report-writer`: 분석 결과를 TODO, 체크리스트, 보고서 형식으로 정리
+
+콘솔 실행에서 멀티에이전트를 끄려면 `.env`에 아래처럼 설정합니다.
+
+```ini
+ENABLE_MULTI_AGENT=false
+```
 
 ## 실패 시 먼저 확인
 
