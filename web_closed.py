@@ -105,6 +105,7 @@ HTML = """<!doctype html>
     }
     .actions {
       display: flex;
+      flex-wrap: wrap;
       align-items: center;
       gap: 12px;
       margin-top: 12px;
@@ -121,6 +122,13 @@ HTML = """<!doctype html>
     button:disabled {
       cursor: wait;
       background: #8baee0;
+    }
+    button.secondary {
+      background: #40516b;
+    }
+    button.ghost {
+      background: #e8eef7;
+      color: #172033;
     }
     .status {
       color: #526173;
@@ -168,6 +176,8 @@ HTML = """<!doctype html>
       <textarea id="prompt">서버 접근권한 보안 점검 TODO 만들어줘.</textarea>
       <div class="actions">
         <button id="run" type="button">실행</button>
+        <button id="test" class="secondary" type="button">모델 연결 테스트</button>
+        <button id="download" class="ghost" type="button">결과 다운로드</button>
         <span id="status" class="status">대기 중</span>
       </div>
       <pre id="result">결과가 여기에 표시됩니다.</pre>
@@ -175,6 +185,8 @@ HTML = """<!doctype html>
   </main>
   <script>
     const button = document.getElementById("run");
+    const testButton = document.getElementById("test");
+    const downloadButton = document.getElementById("download");
     const statusText = document.getElementById("status");
     const promptInput = document.getElementById("prompt");
     const modelSelect = document.getElementById("model");
@@ -196,6 +208,19 @@ HTML = """<!doctype html>
       }
     }
 
+    async function postJson(url, payload) {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "요청 실패");
+      }
+      return data;
+    }
+
     button.addEventListener("click", async () => {
       const prompt = promptInput.value.trim();
       if (!prompt) {
@@ -208,19 +233,11 @@ HTML = """<!doctype html>
       result.textContent = "Qwen 3.5 API 응답을 기다리는 중입니다.";
 
       try {
-        const response = await fetch("/api/run", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            prompt,
-            model: modelSelect.value,
-            multi_agent: multiAgent.checked,
-          }),
+        const data = await postJson("/api/run", {
+          prompt,
+          model: modelSelect.value,
+          multi_agent: multiAgent.checked,
         });
-        const data = await response.json();
-        if (!response.ok) {
-          throw new Error(data.error || "요청 실패");
-        }
         result.textContent = data.result;
         statusText.textContent = "완료";
       } catch (error) {
@@ -229,6 +246,45 @@ HTML = """<!doctype html>
       } finally {
         button.disabled = false;
       }
+    });
+
+    testButton.addEventListener("click", async () => {
+      testButton.disabled = true;
+      statusText.textContent = "연결 테스트 중...";
+      result.textContent = `${modelSelect.value} 모델 연결을 확인하는 중입니다.`;
+
+      try {
+        const data = await postJson("/api/test-model", {
+          model: modelSelect.value,
+        });
+        result.textContent = data.result;
+        statusText.textContent = "연결 정상";
+      } catch (error) {
+        result.textContent = `연결 테스트 실패: ${error.message}`;
+        statusText.textContent = "연결 실패";
+      } finally {
+        testButton.disabled = false;
+      }
+    });
+
+    downloadButton.addEventListener("click", () => {
+      const text = result.textContent.trim();
+      if (!text || text === "결과가 여기에 표시됩니다.") {
+        statusText.textContent = "저장할 결과 없음";
+        return;
+      }
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const content = `# DeepAgents 실행 결과\n\n- 모델: ${modelSelect.value}\n- 멀티에이전트: ${multiAgent.checked ? "사용" : "미사용"}\n- 생성일시: ${new Date().toLocaleString()}\n\n## 요청\n\n${promptInput.value.trim()}\n\n## 결과\n\n${text}\n`;
+      const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `deepagents-result-${timestamp}.md`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      statusText.textContent = "다운로드 완료";
     });
 
     loadModels().catch((error) => {
@@ -271,7 +327,7 @@ class AgentHandler(BaseHTTPRequestHandler):
         self._send_html(HTML)
 
     def do_POST(self) -> None:
-        if self.path != "/api/run":
+        if self.path not in ("/api/run", "/api/test-model"):
             self.send_error(HTTPStatus.NOT_FOUND)
             return
 
@@ -281,11 +337,15 @@ class AgentHandler(BaseHTTPRequestHandler):
             prompt = str(payload.get("prompt", "")).strip()
             model_name = str(payload.get("model") or DEFAULT_MODEL).strip()
             enable_multi_agent = bool(payload.get("multi_agent", True))
-            if not prompt:
-                self._send_json({"error": "prompt 값이 비어 있습니다."}, HTTPStatus.BAD_REQUEST)
-                return
             if model_name not in MODEL_OPTIONS:
                 self._send_json({"error": f"등록되지 않은 모델입니다: {model_name}"}, HTTPStatus.BAD_REQUEST)
+                return
+
+            if self.path == "/api/test-model":
+                prompt = "연결 테스트입니다. 'OK'와 현재 사용 모델명을 짧게 답하세요."
+                enable_multi_agent = False
+            elif not prompt:
+                self._send_json({"error": "prompt 값이 비어 있습니다."}, HTTPStatus.BAD_REQUEST)
                 return
 
             agent = self._get_agent(model_name, enable_multi_agent)

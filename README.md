@@ -224,6 +224,8 @@ http://127.0.0.1:8000
 
 웹 화면에서는 `.env`의 `QWEN_MODELS`에 등록된 모델을 드롭다운으로 선택할 수 있습니다.
 
+`모델 연결 테스트` 버튼은 선택한 모델로 짧은 요청을 보내 API Key, Base URL, 모델명 설정이 맞는지 확인합니다.
+
 멀티에이전트 사용을 켜면 메인 에이전트가 필요할 때 아래 서브에이전트로 작업을 위임합니다.
 
 - `security-checker`: 접근권한, 로그, 취약점 조치 여부를 기준으로 보안 점검 항목 분석
@@ -234,6 +236,8 @@ http://127.0.0.1:8000
 ```ini
 ENABLE_MULTI_AGENT=false
 ```
+
+`결과 다운로드` 버튼은 현재 화면의 응답을 Markdown 파일로 저장합니다.
 
 ## 실패 시 먼저 확인
 
@@ -256,7 +260,7 @@ curl http://xxx.xxx.xxx.xxx:포트/v1/models
 - 외부 웹 검색 도구, 외부 SaaS API, 인터넷 기반 플러그인은 폐쇄망에서 실패할 수 있습니다.
 - Tavily, DuckDuckGo, 외부 검색 Tool은 등록하지 마세요.
 - 사내 DB, 내부 API, 내부 파일 시스템 등 폐쇄망에서 접근 가능한 Tool만 연결하세요.
-- `create_deep_agent(model=qwen_llm)`만 쓰기보다 `tools`, `instructions`, `model`을 명시하는 방식이 폐쇄망 PoC에서 더 안전하고 명확합니다.
+- `create_deep_agent(model=qwen_llm)`만 쓰기보다 `tools`, `system_prompt`, `model`을 명시하는 방식이 폐쇄망 PoC에서 더 안전하고 명확합니다.
 - `deepagents`의 계획 수립과 도구 호출이 정상 동작하려면 Qwen 3.5 API 모델이 Tool Calling을 지원해야 합니다.
 - Qwen 3.5 API가 OpenAI 호환 `/v1/chat/completions` 형태를 지원하는지 확인하세요.
 
