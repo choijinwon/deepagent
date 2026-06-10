@@ -18,6 +18,7 @@ DEFAULT_MODEL = get_default_model()
 MODEL_OPTIONS = get_available_models()
 PROMPT_STORE_PATH = Path(os.getenv("PROMPT_STORE_PATH", "prompt_templates.json"))
 WIKI_LOG_DIR = Path(os.getenv("WIKI_LOG_DIR", "wiki_logs"))
+WIKI_LOG_STYLE = os.getenv("WIKI_LOG_STYLE", "vllm")
 
 HTML = """<!doctype html>
 <html lang="ko">
@@ -475,17 +476,30 @@ def save_wiki_record(
     day_dir = WIKI_LOG_DIR / day
     day_dir.mkdir(parents=True, exist_ok=True)
     record_path = day_dir / filename
+    base_url = os.getenv("QWEN_BASE_URL", "")
+    model_list = ", ".join(MODEL_OPTIONS)
 
     record_path.write_text(
         "\n".join(
             [
-                f"# {prompt[:80]}",
+                f"# vLLM 실행 기록 - {prompt[:80]}",
                 "",
-                "## Metadata",
+                "## vLLM Serving",
                 "",
                 f"- Created: {timestamp}",
                 f"- Model: {model_name}",
+                f"- Registered Models: {model_list}",
+                f"- OpenAI Compatible Base URL: {base_url or 'not configured'}",
+                "- Chat Completions Path: /chat/completions",
+                "- Tool Calling Required: yes",
+                "- API Key Stored: no",
+                "",
+                "## DeepAgents Runtime",
+                "",
                 f"- Multi Agent: {'enabled' if enable_multi_agent else 'disabled'}",
+                "- External Web Tools: disabled",
+                "- Internal Tools: make_security_todo",
+                "- Subagents: security-checker, report-writer",
                 "",
                 "## Prompt",
                 "",
@@ -506,7 +520,16 @@ def save_wiki_record(
 def rebuild_wiki_index() -> None:
     WIKI_LOG_DIR.mkdir(parents=True, exist_ok=True)
     lines = [
-        "# DeepAgents 실행 기록 Wiki",
+        "# vLLM DeepAgents 실행 기록 Wiki",
+        "",
+        "## Environment",
+        "",
+        f"- Wiki Style: {WIKI_LOG_STYLE}",
+        f"- Registered Models: {', '.join(MODEL_OPTIONS)}",
+        f"- Default Model: {DEFAULT_MODEL}",
+        f"- OpenAI Compatible Base URL: {os.getenv('QWEN_BASE_URL', 'not configured')}",
+        "- API Key: not recorded",
+        "- Tool Calling: required",
         "",
         "## Tree",
         "",

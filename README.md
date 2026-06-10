@@ -158,6 +158,7 @@ WEB_HOST=127.0.0.1
 WEB_PORT=8000
 PROMPT_STORE_PATH=prompt_templates.json
 WIKI_LOG_DIR=wiki_logs
+WIKI_LOG_STYLE=vllm
 ```
 
 `QWEN_BASE_URL`에 `/v1`이 붙는지 반드시 확인하세요.
@@ -249,7 +250,7 @@ ENABLE_MULTI_AGENT=false
 PROMPT_STORE_PATH=prompt_templates.json
 ```
 
-웹에서 `실행` 버튼으로 생성한 결과는 위키트리 형식의 Markdown 기록으로 자동 저장됩니다.
+웹에서 `실행` 버튼으로 생성한 결과는 vLLM 위키트리 형식의 Markdown 기록으로 자동 저장됩니다.
 기본 저장 폴더는 `wiki_logs/`입니다.
 
 ```text
@@ -260,11 +261,14 @@ wiki_logs/
    └─ 102010-보안-점검-보고서-초안.md
 ```
 
-`wiki_logs/index.md`에는 날짜별 실행 기록 트리와 각 Markdown 문서 링크가 자동으로 갱신됩니다.
+`wiki_logs/index.md`에는 vLLM 환경 정보, 등록 모델, 날짜별 실행 기록 트리와 각 Markdown 문서 링크가 자동으로 갱신됩니다.
+각 실행 기록에는 모델명, OpenAI 호환 Base URL, Tool Calling 필요 여부, 멀티에이전트 사용 여부, 프롬프트, 결과가 저장됩니다.
+API Key는 기록하지 않습니다.
 저장 위치를 바꾸려면 `.env`에서 아래 값을 수정합니다.
 
 ```ini
 WIKI_LOG_DIR=wiki_logs
+WIKI_LOG_STYLE=vllm
 ```
 
 ## 실패 시 먼저 확인
