@@ -1,0 +1,9 @@
+deepagents
+langchain
+langchain-core
+langchain-openai
+langgraph
+pydantic
+python-dotenv
+requests
+httpx
