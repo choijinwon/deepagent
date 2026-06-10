@@ -19,6 +19,7 @@ deepagent/
 ├─ .env.example
 ├─ .gitignore
 └─ scripts/
+   ├─ prepare_external_pc.ps1
    ├─ build_offline_packages.ps1
    └─ install_offline.ps1
 ```
@@ -28,14 +29,15 @@ deepagent/
 ```text
 외부 인터넷 PC
 1. 이 저장소 다운로드
-2. offline_packages 폴더에 wheel 패키지 다운로드
-3. deepagent 폴더와 offline_packages 폴더를 USB/보안망으로 복사
+2. 공식 langchain-ai/deepagents 소스 다운로드
+3. offline_packages 폴더에 wheel 패키지 다운로드
+4. offline_bundle 폴더를 USB/보안망으로 복사
 
 폐쇄망 PC
-4. Python 가상환경 생성
-5. offline_packages만 사용해서 오프라인 설치
-6. .env 작성
-7. app_closed.py 실행
+5. Python 가상환경 생성
+6. offline_packages만 사용해서 오프라인 설치
+7. .env 작성
+8. app_closed.py 실행
 ```
 
 ## 1. 외부 인터넷 PC에서 준비
@@ -54,6 +56,28 @@ python --version
 ```
 
 오프라인 설치용 wheel 패키지를 다운로드합니다.
+이 명령은 공식 `langchain-ai/deepagents` 저장소도 함께 클론하고, 폐쇄망 반입용 `offline_bundle` 폴더를 만듭니다.
+
+```powershell
+.\scripts\prepare_external_pc.ps1
+```
+
+공식 DeepAgents 소스는 아래 경로에 받아집니다.
+
+```text
+external_sources/deepagents/
+```
+
+폐쇄망으로 가져갈 최종 묶음은 아래 경로에 생성됩니다.
+
+```text
+offline_bundle/
+├─ deepagent/
+├─ offline_packages/
+└─ deepagents_official_source/
+```
+
+wheel 패키지만 다시 받고 싶은 경우에는 아래 스크립트만 실행해도 됩니다.
 
 ```powershell
 .\scripts\build_offline_packages.ps1
@@ -69,17 +93,18 @@ pip download -d offline_packages -r requirements.txt
 
 ## 2. 폐쇄망 PC로 복사
 
-아래 2개를 통째로 폐쇄망 PC에 복사합니다.
+아래 폴더를 통째로 폐쇄망 PC에 복사합니다.
 
-- `deepagent/`
-- `offline_packages/`
+- `offline_bundle/`
+
+`offline_bundle` 안에는 실행용 PoC, 오프라인 wheel 패키지, 공식 DeepAgents 소스가 함께 들어 있습니다.
 
 중요: 폐쇄망 PC에서는 `git clone`, `pip download`, 인터넷 기반 설치를 실행하지 않습니다.
 
 ## 3. 폐쇄망 PC에서 가상환경 생성
 
 ```powershell
-cd deepagent
+cd offline_bundle\deepagent
 
 python -m venv .venv
 .venv\Scripts\activate
@@ -87,7 +112,7 @@ python -m venv .venv
 
 ## 4. 폐쇄망 PC에서 오프라인 설치
 
-`offline_packages` 폴더가 `deepagent` 폴더와 같은 위치에 있다고 가정합니다.
+`offline_packages` 폴더가 `offline_bundle` 아래에 있다고 가정합니다.
 
 PowerShell 실행 정책 때문에 `.ps1` 실행이 막히면 현재 PowerShell 창에서만 아래 명령으로 임시 허용합니다.
 

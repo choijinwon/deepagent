@@ -12,3 +12,6 @@ dist/
 *.egg-info/
 deepagents_packages/
 offline_packages/
+external_sources/
+offline_bundle/
+work/
