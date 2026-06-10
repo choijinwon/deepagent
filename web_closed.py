@@ -2,6 +2,7 @@ import json
 import os
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 from app_closed import build_agent, get_available_models, get_default_model
 from dotenv import load_dotenv
@@ -13,6 +14,7 @@ HOST = os.getenv("WEB_HOST", "127.0.0.1")
 PORT = int(os.getenv("WEB_PORT", "8000"))
 DEFAULT_MODEL = get_default_model()
 MODEL_OPTIONS = get_available_models()
+PROMPT_STORE_PATH = Path(os.getenv("PROMPT_STORE_PATH", "prompt_templates.json"))
 
 HTML = """<!doctype html>
 <html lang="ko">
@@ -92,6 +94,21 @@ HTML = """<!doctype html>
       background: #ffffff;
       font: inherit;
     }
+    input[type="text"] {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 10px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      background: #ffffff;
+      font: inherit;
+    }
+    .prompt-library {
+      display: grid;
+      grid-template-columns: minmax(180px, 260px) 1fr;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
     .toggle {
       display: flex;
       align-items: center;
@@ -149,7 +166,8 @@ HTML = """<!doctype html>
       font-size: 14px;
     }
     @media (max-width: 680px) {
-      .controls {
+      .controls,
+      .prompt-library {
         grid-template-columns: 1fr;
       }
     }
@@ -172,11 +190,23 @@ HTML = """<!doctype html>
           멀티에이전트 사용
         </label>
       </div>
+      <div class="prompt-library">
+        <div>
+          <label for="savedPrompts">저장된 프롬프트</label>
+          <select id="savedPrompts"></select>
+        </div>
+        <div>
+          <label for="promptName">프롬프트 이름</label>
+          <input id="promptName" type="text" placeholder="예: 접근권한 점검 보고서">
+        </div>
+      </div>
       <label for="prompt">요청 내용</label>
       <textarea id="prompt">서버 접근권한 보안 점검 TODO 만들어줘.</textarea>
       <div class="actions">
         <button id="run" type="button">실행</button>
         <button id="test" class="secondary" type="button">모델 연결 테스트</button>
+        <button id="savePrompt" class="secondary" type="button">프롬프트 저장</button>
+        <button id="deletePrompt" class="ghost" type="button">프롬프트 삭제</button>
         <button id="download" class="ghost" type="button">결과 다운로드</button>
         <span id="status" class="status">대기 중</span>
       </div>
@@ -186,11 +216,15 @@ HTML = """<!doctype html>
   <script>
     const button = document.getElementById("run");
     const testButton = document.getElementById("test");
+    const savePromptButton = document.getElementById("savePrompt");
+    const deletePromptButton = document.getElementById("deletePrompt");
     const downloadButton = document.getElementById("download");
     const statusText = document.getElementById("status");
     const promptInput = document.getElementById("prompt");
     const modelSelect = document.getElementById("model");
     const multiAgent = document.getElementById("multiAgent");
+    const savedPrompts = document.getElementById("savedPrompts");
+    const promptName = document.getElementById("promptName");
     const result = document.getElementById("result");
 
     async function loadModels() {
@@ -205,6 +239,25 @@ HTML = """<!doctype html>
           option.selected = true;
         }
         modelSelect.appendChild(option);
+      }
+    }
+
+    async function loadPrompts() {
+      const response = await fetch("/api/prompts");
+      const data = await response.json();
+      savedPrompts.innerHTML = "";
+
+      const empty = document.createElement("option");
+      empty.value = "";
+      empty.textContent = "저장된 프롬프트 선택";
+      savedPrompts.appendChild(empty);
+
+      for (const item of data.prompts) {
+        const option = document.createElement("option");
+        option.value = item.name;
+        option.textContent = item.name;
+        option.dataset.content = item.content;
+        savedPrompts.appendChild(option);
       }
     }
 
@@ -245,6 +298,59 @@ HTML = """<!doctype html>
         statusText.textContent = "실패";
       } finally {
         button.disabled = false;
+      }
+    });
+
+    savedPrompts.addEventListener("change", () => {
+      const selected = savedPrompts.selectedOptions[0];
+      if (!selected || !selected.value) {
+        return;
+      }
+      promptName.value = selected.value;
+      promptInput.value = selected.dataset.content || "";
+      statusText.textContent = "프롬프트 불러옴";
+    });
+
+    savePromptButton.addEventListener("click", async () => {
+      const name = promptName.value.trim();
+      const content = promptInput.value.trim();
+      if (!name || !content) {
+        statusText.textContent = "이름/내용 필요";
+        return;
+      }
+
+      savePromptButton.disabled = true;
+      try {
+        await postJson("/api/prompts/save", { name, content });
+        await loadPrompts();
+        savedPrompts.value = name;
+        statusText.textContent = "프롬프트 저장됨";
+      } catch (error) {
+        result.textContent = `프롬프트 저장 실패: ${error.message}`;
+        statusText.textContent = "저장 실패";
+      } finally {
+        savePromptButton.disabled = false;
+      }
+    });
+
+    deletePromptButton.addEventListener("click", async () => {
+      const name = promptName.value.trim() || savedPrompts.value;
+      if (!name) {
+        statusText.textContent = "삭제할 프롬프트 없음";
+        return;
+      }
+
+      deletePromptButton.disabled = true;
+      try {
+        await postJson("/api/prompts/delete", { name });
+        await loadPrompts();
+        promptName.value = "";
+        statusText.textContent = "프롬프트 삭제됨";
+      } catch (error) {
+        result.textContent = `프롬프트 삭제 실패: ${error.message}`;
+        statusText.textContent = "삭제 실패";
+      } finally {
+        deletePromptButton.disabled = false;
       }
     });
 
@@ -290,6 +396,9 @@ HTML = """<!doctype html>
     loadModels().catch((error) => {
       result.textContent = `모델 목록 로드 실패: ${error.message}`;
     });
+    loadPrompts().catch((error) => {
+      result.textContent = `프롬프트 목록 로드 실패: ${error.message}`;
+    });
   </script>
 </body>
 </html>
@@ -309,6 +418,36 @@ def format_agent_result(result) -> str:
     return str(result)
 
 
+def load_prompt_store() -> list[dict[str, str]]:
+    if not PROMPT_STORE_PATH.exists():
+        return []
+
+    try:
+        data = json.loads(PROMPT_STORE_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+
+    prompts = data.get("prompts", []) if isinstance(data, dict) else []
+    clean_prompts = []
+    for item in prompts:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name", "")).strip()
+        content = str(item.get("content", "")).strip()
+        if name and content:
+            clean_prompts.append({"name": name, "content": content})
+    return clean_prompts
+
+
+def save_prompt_store(prompts: list[dict[str, str]]) -> None:
+    PROMPT_STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"prompts": sorted(prompts, key=lambda item: item["name"])}
+    PROMPT_STORE_PATH.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
 class AgentHandler(BaseHTTPRequestHandler):
     agents = {}
 
@@ -321,19 +460,30 @@ class AgentHandler(BaseHTTPRequestHandler):
                 }
             )
             return
+        if self.path == "/api/prompts":
+            self._send_json({"prompts": load_prompt_store()})
+            return
         if self.path not in ("/", "/index.html"):
             self.send_error(HTTPStatus.NOT_FOUND)
             return
         self._send_html(HTML)
 
     def do_POST(self) -> None:
-        if self.path not in ("/api/run", "/api/test-model"):
+        if self.path not in ("/api/run", "/api/test-model", "/api/prompts/save", "/api/prompts/delete"):
             self.send_error(HTTPStatus.NOT_FOUND)
             return
 
         try:
             length = int(self.headers.get("Content-Length", "0"))
             payload = json.loads(self.rfile.read(length).decode("utf-8"))
+
+            if self.path == "/api/prompts/save":
+                self._save_prompt(payload)
+                return
+            if self.path == "/api/prompts/delete":
+                self._delete_prompt(payload)
+                return
+
             prompt = str(payload.get("prompt", "")).strip()
             model_name = str(payload.get("model") or DEFAULT_MODEL).strip()
             enable_multi_agent = bool(payload.get("multi_agent", True))
@@ -362,6 +512,31 @@ class AgentHandler(BaseHTTPRequestHandler):
             self._send_json({"result": format_agent_result(response)})
         except Exception as exc:
             self._send_json({"error": str(exc)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+
+    def _save_prompt(self, payload: dict) -> None:
+        name = str(payload.get("name", "")).strip()
+        content = str(payload.get("content", "")).strip()
+        if not name or not content:
+            self._send_json({"error": "name과 content가 필요합니다."}, HTTPStatus.BAD_REQUEST)
+            return
+        if len(name) > 80:
+            self._send_json({"error": "프롬프트 이름은 80자 이하로 입력하세요."}, HTTPStatus.BAD_REQUEST)
+            return
+
+        prompts = [item for item in load_prompt_store() if item["name"] != name]
+        prompts.append({"name": name, "content": content})
+        save_prompt_store(prompts)
+        self._send_json({"ok": True, "prompts": load_prompt_store()})
+
+    def _delete_prompt(self, payload: dict) -> None:
+        name = str(payload.get("name", "")).strip()
+        if not name:
+            self._send_json({"error": "name이 필요합니다."}, HTTPStatus.BAD_REQUEST)
+            return
+
+        prompts = [item for item in load_prompt_store() if item["name"] != name]
+        save_prompt_store(prompts)
+        self._send_json({"ok": True, "prompts": prompts})
 
     def log_message(self, format: str, *args) -> None:
         print(f"[web] {self.address_string()} - {format % args}")

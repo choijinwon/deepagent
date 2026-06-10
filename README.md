@@ -156,6 +156,7 @@ QWEN_MODELS=qwen3.5,gpt20,gamma
 ENABLE_MULTI_AGENT=true
 WEB_HOST=127.0.0.1
 WEB_PORT=8000
+PROMPT_STORE_PATH=prompt_templates.json
 ```
 
 `QWEN_BASE_URL`에 `/v1`이 붙는지 반드시 확인하세요.
@@ -239,6 +240,14 @@ ENABLE_MULTI_AGENT=false
 
 `결과 다운로드` 버튼은 현재 화면의 응답을 Markdown 파일로 저장합니다.
 
+자주 쓰는 프롬프트는 웹 화면에서 이름을 입력한 뒤 `프롬프트 저장` 버튼으로 저장할 수 있습니다.
+저장된 프롬프트는 `저장된 프롬프트` 목록에서 다시 불러오거나 삭제할 수 있습니다.
+기본 저장 파일은 `prompt_templates.json`이며, 위치를 바꾸려면 `.env`에서 아래 값을 수정합니다.
+
+```ini
+PROMPT_STORE_PATH=prompt_templates.json
+```
+
 ## 실패 시 먼저 확인
 
 패키지 import를 확인합니다.
@@ -267,4 +276,5 @@ curl http://xxx.xxx.xxx.xxx:포트/v1/models
 ## Git 업로드 전 확인
 
 `.env` 파일은 민감 정보가 포함되므로 Git에 올리지 않습니다.
+`prompt_templates.json`은 사용자별 프롬프트 저장 파일이므로 Git에 올리지 않습니다.
 `offline_packages/`는 용량이 크고 환경별 wheel이 섞일 수 있으므로 Git에 올리지 않습니다.
