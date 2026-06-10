@@ -16,6 +16,10 @@
 deepagent/
 ├─ app_closed.py
 ├─ web_closed.py
+├─ skills/
+│  ├─ security-report/
+│  ├─ access-audit/
+│  └─ vllm-ops-wiki/
 ├─ requirements.txt
 ├─ .env.example
 ├─ .gitignore
@@ -154,6 +158,7 @@ QWEN_BASE_URL=http://xxx.xxx.xxx.xxx:포트/v1
 QWEN_MODEL=qwen3.5
 QWEN_MODELS=qwen3.5,gpt20,gamma
 ENABLE_MULTI_AGENT=true
+ENABLE_HARNESS_SKILLS=true
 WEB_HOST=127.0.0.1
 WEB_PORT=8000
 PROMPT_STORE_PATH=prompt_templates.json
@@ -191,6 +196,24 @@ QWEN_MODEL=gamma
 
 DeepAgents는 Tool Calling 가능한 Chat Model을 전제로 동작하므로, 먼저 `qwen3.5`로 테스트하고 Tool Calling 오류가 나면 `gpt20` 또는 `gamma`로 바꿔 확인하세요.
 
+하네스 스킬은 기본으로 켜져 있습니다.
+
+```ini
+ENABLE_HARNESS_SKILLS=true
+```
+
+현재 포함된 스킬은 아래와 같습니다.
+
+- `security-report`: 보안 점검 보고서, TODO, 체크리스트 작성
+- `access-audit`: 서버 접근권한, 계정, 권한, 로그 점검
+- `vllm-ops-wiki`: vLLM 실행 기록과 운영 위키 Markdown 작성
+
+스킬을 끄고 순수 Tool/Subagent만 테스트하려면 아래처럼 설정합니다.
+
+```ini
+ENABLE_HARNESS_SKILLS=false
+```
+
 ## 6. 실행
 
 콘솔에서 바로 테스트하려면 아래 명령을 실행합니다.
@@ -206,7 +229,18 @@ agent = create_deep_agent(
     model=qwen_llm,
     tools=[make_security_todo],
     system_prompt=INSTRUCTIONS,
+    subagents=subagents,
+    skills=get_harness_skill_sources(),
 )
+```
+
+기본 `StateBackend`를 사용하므로 실행 시 로컬 `skills/` 파일을 가상 파일로 주입합니다.
+
+```python
+agent.invoke({
+    "messages": [...],
+    "files": get_harness_skill_files(),
+})
 ```
 
 ## 7. 웹으로 실행
@@ -262,7 +296,7 @@ wiki_logs/
 ```
 
 `wiki_logs/index.md`에는 vLLM 환경 정보, 등록 모델, 날짜별 실행 기록 트리와 각 Markdown 문서 링크가 자동으로 갱신됩니다.
-각 실행 기록에는 모델명, OpenAI 호환 Base URL, Tool Calling 필요 여부, 멀티에이전트 사용 여부, 프롬프트, 결과가 저장됩니다.
+각 실행 기록에는 모델명, OpenAI 호환 Base URL, Tool Calling 필요 여부, 멀티에이전트 사용 여부, 하네스 스킬 목록, 프롬프트, 결과가 저장됩니다.
 API Key는 기록하지 않습니다.
 저장 위치를 바꾸려면 `.env`에서 아래 값을 수정합니다.
 

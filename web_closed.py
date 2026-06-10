@@ -6,7 +6,14 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from app_closed import build_agent, get_available_models, get_default_model
+from app_closed import (
+    build_agent,
+    get_available_models,
+    get_default_model,
+    get_harness_skill_files,
+    get_harness_skill_names,
+    harness_skills_enabled,
+)
 from dotenv import load_dotenv
 
 
@@ -497,6 +504,8 @@ def save_wiki_record(
                 "## DeepAgents Runtime",
                 "",
                 f"- Multi Agent: {'enabled' if enable_multi_agent else 'disabled'}",
+                f"- Harness Skills: {'enabled' if harness_skills_enabled() else 'disabled'}",
+                f"- Skill List: {', '.join(get_harness_skill_names()) or 'none'}",
                 "- External Web Tools: disabled",
                 "- Internal Tools: make_security_todo",
                 "- Subagents: security-checker, report-writer",
@@ -528,6 +537,8 @@ def rebuild_wiki_index() -> None:
         f"- Registered Models: {', '.join(MODEL_OPTIONS)}",
         f"- Default Model: {DEFAULT_MODEL}",
         f"- OpenAI Compatible Base URL: {os.getenv('QWEN_BASE_URL', 'not configured')}",
+        f"- Harness Skills: {'enabled' if harness_skills_enabled() else 'disabled'}",
+        f"- Skill List: {', '.join(get_harness_skill_names()) or 'none'}",
         "- API Key: not recorded",
         "- Tool Calling: required",
         "",
@@ -615,7 +626,8 @@ class AgentHandler(BaseHTTPRequestHandler):
                             "role": "user",
                             "content": prompt,
                         }
-                    ]
+                    ],
+                    "files": get_harness_skill_files(),
                 }
             )
             result_text = format_agent_result(response)

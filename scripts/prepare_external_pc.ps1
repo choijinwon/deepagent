@@ -34,6 +34,7 @@ Copy-Item -Force (Join-Path $Root "web_closed.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "requirements.txt") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root ".env.example") $BundleProjectDir
 Copy-Item -Recurse -Force (Join-Path $Root "scripts") $BundleProjectDir
+Copy-Item -Recurse -Force (Join-Path $Root "skills") $BundleProjectDir
 Copy-Item -Recurse -Force $PackageDir $BundleDir
 Copy-Item -Recurse -Force $DeepAgentsSource $BundleSourceDir
 

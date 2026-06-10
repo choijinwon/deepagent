@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import Any
 
 from deepagents import create_deep_agent
@@ -8,6 +9,8 @@ from langchain_openai import ChatOpenAI
 
 
 DEFAULT_MODELS = ["qwen3.5", "gpt20", "gamma"]
+SKILLS_ROOT = Path(__file__).resolve().parent / "skills"
+SKILL_SOURCE = "/skills/"
 
 
 def get_available_models() -> list[str]:
@@ -46,6 +49,32 @@ def build_qwen_llm(model_name: str | None = None) -> ChatOpenAI:
     )
 
 
+def harness_skills_enabled() -> bool:
+    load_dotenv()
+    return os.getenv("ENABLE_HARNESS_SKILLS", "true").lower() in ("1", "true", "yes", "y")
+
+
+def get_harness_skill_sources() -> list[str] | None:
+    return [SKILL_SOURCE] if harness_skills_enabled() else None
+
+
+def get_harness_skill_files() -> dict[str, str]:
+    if not harness_skills_enabled() or not SKILLS_ROOT.exists():
+        return {}
+
+    skill_files = {}
+    for skill_file in sorted(SKILLS_ROOT.glob("*/SKILL.md")):
+        virtual_path = f"/skills/{skill_file.parent.name}/SKILL.md"
+        skill_files[virtual_path] = skill_file.read_text(encoding="utf-8")
+    return skill_files
+
+
+def get_harness_skill_names() -> list[str]:
+    if not harness_skills_enabled() or not SKILLS_ROOT.exists():
+        return []
+    return sorted(path.parent.name for path in SKILLS_ROOT.glob("*/SKILL.md"))
+
+
 @tool
 def make_security_todo(topic: str) -> str:
     """사내 보안 점검 TODO를 생성한다."""
@@ -71,6 +100,7 @@ INSTRUCTIONS = """
 
 
 def build_subagents() -> list[dict[str, Any]]:
+    skill_sources = get_harness_skill_sources()
     return [
         {
             "name": "security-checker",
@@ -81,6 +111,7 @@ def build_subagents() -> list[dict[str, Any]]:
 점검 대상, 권한, 로그, 취약점 조치, 담당자 확인 관점으로 누락 항목을 찾아 체크리스트로 정리한다.
 """,
             "tools": [make_security_todo],
+            "skills": skill_sources or [],
         },
         {
             "name": "report-writer",
@@ -91,6 +122,7 @@ def build_subagents() -> list[dict[str, Any]]:
 분석 내용을 요약, TODO, 담당자 확인 사항, 후속 조치 형식으로 명확하게 작성한다.
 """,
             "tools": [make_security_todo],
+            "skills": skill_sources or [],
         },
     ]
 
@@ -103,6 +135,7 @@ def build_agent(model_name: str | None = None, enable_multi_agent: bool = True):
         tools=[make_security_todo],
         system_prompt=INSTRUCTIONS,
         subagents=subagents,
+        skills=get_harness_skill_sources(),
     )
 
 
@@ -113,6 +146,7 @@ def main() -> None:
 
     print(f"[폐쇄망 안전 모드] 딥에이전트가 내부 Qwen API 모델({model_name})과 통신을 시작합니다...")
     print(f"멀티에이전트 모드: {'사용' if enable_multi_agent else '미사용'}")
+    print(f"하네스 스킬: {', '.join(get_harness_skill_names()) or '미사용'}")
 
     try:
         result = agent.invoke(
@@ -122,7 +156,8 @@ def main() -> None:
                         "role": "user",
                         "content": "서버 접근권한 보안 점검 TODO 만들어줘.",
                     }
-                ]
+                ],
+                "files": get_harness_skill_files(),
             }
         )
 
