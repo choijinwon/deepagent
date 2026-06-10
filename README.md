@@ -15,6 +15,7 @@
 ```text
 deepagent/
 ├─ app_closed.py
+├─ web_closed.py
 ├─ requirements.txt
 ├─ .env.example
 ├─ .gitignore
@@ -37,7 +38,7 @@ deepagent/
 5. Python 가상환경 생성
 6. offline_packages만 사용해서 오프라인 설치
 7. .env 작성
-8. app_closed.py 실행
+8. app_closed.py 또는 web_closed.py 실행
 ```
 
 ## 1. 외부 인터넷 PC에서 준비
@@ -151,11 +152,15 @@ copy .env.example .env
 KWAN_API_KEY=your-internal-kwan-key
 KWAN_BASE_URL=http://xxx.xxx.xxx.xxx:포트/v1
 KWAN_MODEL=kwan-model-name
+WEB_HOST=127.0.0.1
+WEB_PORT=8000
 ```
 
 `KWAN_BASE_URL`에 `/v1`이 붙는지 반드시 확인하세요.
 
 ## 6. 실행
+
+콘솔에서 바로 테스트하려면 아래 명령을 실행합니다.
 
 ```powershell
 python app_closed.py
@@ -170,6 +175,22 @@ agent = create_deep_agent(
     instructions=INSTRUCTIONS,
 )
 ```
+
+## 7. 웹으로 실행
+
+추가 패키지 설치 없이 Python 표준 라이브러리 HTTP 서버로 실행됩니다.
+
+```powershell
+python web_closed.py
+```
+
+브라우저에서 아래 주소를 엽니다.
+
+```text
+http://127.0.0.1:8000
+```
+
+다른 PC에서 접속해야 하는 내부 테스트 환경이면 `.env`에서 `WEB_HOST`를 `0.0.0.0`으로 바꾸고 Windows 방화벽 인바운드 규칙에서 해당 포트를 허용하세요.
 
 ## 실패 시 먼저 확인
 

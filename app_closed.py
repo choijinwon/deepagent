@@ -49,13 +49,17 @@ INSTRUCTIONS = """
 """
 
 
-def main() -> None:
+def build_agent():
     kwan_llm = build_kwan_llm()
-    agent = create_deep_agent(
+    return create_deep_agent(
         model=kwan_llm,
         tools=[make_security_todo],
         instructions=INSTRUCTIONS,
     )
+
+
+def main() -> None:
+    agent = build_agent()
 
     print("[폐쇄망 안전 모드] 딥에이전트가 내부 Kwan API와 통신을 시작합니다...")
 
@@ -77,7 +81,5 @@ def main() -> None:
     except Exception as exc:
         print("\n연결 실패: Kwan API 주소나 모델명을 확인하세요.")
         print(f"오류 내용: {exc}")
-
-
 if __name__ == "__main__":
     main()
