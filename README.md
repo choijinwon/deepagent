@@ -1,13 +1,13 @@
-# DeepAgents 폐쇄망 Kwan API 연동 PoC
+# DeepAgents 폐쇄망 Qwen 3.5 API 연동 PoC
 
-폐쇄망 내부에서 OpenAI 호환 Kwan API 서버를 `deepagents`의 LLM 백엔드로 연결하는 PoC 예제입니다.
+폐쇄망 내부에서 OpenAI 호환 Qwen 3.5 API 서버를 `deepagents`의 LLM 백엔드로 연결하는 PoC 예제입니다.
 설치와 실행 명령은 Windows 11 Pro / PowerShell 기준입니다.
 
 핵심은 다음 4가지입니다.
 
 - 인터넷 다운로드는 외부 PC에서만 수행
 - 폐쇄망 PC에는 소스와 wheel 패키지 묶음만 복사
-- Kwan OpenAI 호환 API를 `ChatOpenAI`의 `base_url`로 연결
+- Qwen 3.5 OpenAI 호환 API를 `ChatOpenAI`의 `base_url`로 연결
 - 외부 검색 Tool은 제거하고 사내 내부 Tool만 등록
 
 ## 폴더 구성
@@ -146,30 +146,30 @@ python -c "import langchain_openai; print('langchain_openai import OK')"
 copy .env.example .env
 ```
 
-`.env` 파일의 값을 사내 Kwan API 서버 정보에 맞게 수정합니다.
+`.env` 파일의 값을 사내 Qwen 3.5 API 서버 정보에 맞게 수정합니다.
 
 ```ini
-KWAN_API_KEY=your-internal-kwan-key
-KWAN_BASE_URL=http://xxx.xxx.xxx.xxx:포트/v1
-KWAN_MODEL=qwen3.5
+QWEN_API_KEY=your-internal-qwen-key
+QWEN_BASE_URL=http://xxx.xxx.xxx.xxx:포트/v1
+QWEN_MODEL=qwen3.5
 WEB_HOST=127.0.0.1
 WEB_PORT=8000
 ```
 
-`KWAN_BASE_URL`에 `/v1`이 붙는지 반드시 확인하세요.
+`QWEN_BASE_URL`에 `/v1`이 붙는지 반드시 확인하세요.
 
-사용 가능한 Kwan 모델명이 아래와 같다면 `KWAN_MODEL` 값만 바꿔서 실행합니다.
+사용 가능한 모델명이 아래와 같다면 `QWEN_MODEL` 값만 바꿔서 실행합니다.
 
 ```ini
-KWAN_MODEL=qwen3.5
+QWEN_MODEL=qwen3.5
 ```
 
 ```ini
-KWAN_MODEL=gpt20
+QWEN_MODEL=gpt20
 ```
 
 ```ini
-KWAN_MODEL=gamma
+QWEN_MODEL=gamma
 ```
 
 DeepAgents는 Tool Calling 가능한 Chat Model을 전제로 동작하므로, 먼저 `qwen3.5`로 테스트하고 Tool Calling 오류가 나면 `gpt20` 또는 `gamma`로 바꿔 확인하세요.
@@ -186,7 +186,7 @@ python app_closed.py
 
 ```python
 agent = create_deep_agent(
-    model=kwan_llm,
+    model=qwen_llm,
     tools=[make_security_todo],
     instructions=INSTRUCTIONS,
 )
@@ -217,7 +217,7 @@ python -c "import langchain_openai; print('ok')"
 python -c "import deepagents; print('ok')"
 ```
 
-Kwan API 연결을 확인합니다.
+Qwen 3.5 API 연결을 확인합니다.
 
 ```powershell
 curl http://xxx.xxx.xxx.xxx:포트/v1/models
@@ -229,9 +229,9 @@ curl http://xxx.xxx.xxx.xxx:포트/v1/models
 - 외부 웹 검색 도구, 외부 SaaS API, 인터넷 기반 플러그인은 폐쇄망에서 실패할 수 있습니다.
 - Tavily, DuckDuckGo, 외부 검색 Tool은 등록하지 마세요.
 - 사내 DB, 내부 API, 내부 파일 시스템 등 폐쇄망에서 접근 가능한 Tool만 연결하세요.
-- `create_deep_agent(model=kwan_llm)`만 쓰기보다 `tools`, `instructions`, `model`을 명시하는 방식이 폐쇄망 PoC에서 더 안전하고 명확합니다.
-- `deepagents`의 계획 수립과 도구 호출이 정상 동작하려면 Kwan API 모델이 Tool Calling을 지원해야 합니다.
-- Kwan API가 OpenAI 호환 `/v1/chat/completions` 형태를 지원하는지 확인하세요.
+- `create_deep_agent(model=qwen_llm)`만 쓰기보다 `tools`, `instructions`, `model`을 명시하는 방식이 폐쇄망 PoC에서 더 안전하고 명확합니다.
+- `deepagents`의 계획 수립과 도구 호출이 정상 동작하려면 Qwen 3.5 API 모델이 Tool Calling을 지원해야 합니다.
+- Qwen 3.5 API가 OpenAI 호환 `/v1/chat/completions` 형태를 지원하는지 확인하세요.
 
 ## Git 업로드 전 확인
 

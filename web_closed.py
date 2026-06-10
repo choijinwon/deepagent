@@ -17,7 +17,7 @@ HTML = """<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>폐쇄망 DeepAgents Kwan PoC</title>
+  <title>폐쇄망 DeepAgents Qwen 3.5 PoC</title>
   <style>
     :root {
       color-scheme: light;
@@ -116,8 +116,8 @@ HTML = """<!doctype html>
 <body>
   <main>
     <header>
-      <h1>폐쇄망 DeepAgents Kwan PoC</h1>
-      <div class="subtitle">외부 검색 없이 내부 Kwan API와 등록된 사내 Tool만 사용합니다.</div>
+      <h1>폐쇄망 DeepAgents Qwen 3.5 PoC</h1>
+      <div class="subtitle">외부 검색 없이 내부 Qwen 3.5 API와 등록된 사내 Tool만 사용합니다.</div>
     </header>
     <section>
       <label for="prompt">요청 내용</label>
@@ -144,7 +144,7 @@ HTML = """<!doctype html>
 
       button.disabled = true;
       statusText.textContent = "실행 중...";
-      result.textContent = "Kwan API 응답을 기다리는 중입니다.";
+      result.textContent = "Qwen 3.5 API 응답을 기다리는 중입니다.";
 
       try {
         const response = await fetch("/api/run", {
