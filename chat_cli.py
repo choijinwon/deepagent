@@ -42,7 +42,12 @@ from app_closed import (
     get_harness_skill_names,
     harness_skills_enabled,
 )
-from web_closed import format_agent_result, load_prompt_store, save_prompt_store, save_wiki_record
+from web_closed import (
+    invoke_agent_text,
+    load_prompt_store,
+    save_prompt_store,
+    save_wiki_record,
+)
 
 
 HELP_TEXT = """
@@ -183,10 +188,20 @@ def wrap_print(text: str) -> None:
     print("-" * 78)
 
 
-def invoke_chat(cache: ChatAgentCache, state: ChatState, prompt: str) -> str:
+def invoke_chat(
+    cache: ChatAgentCache,
+    state: ChatState,
+    prompt: str,
+    *,
+    show_progress: bool = False,
+    stream_to_console: bool = False,
+) -> str:
     state.messages.append({"role": "user", "content": prompt})
     state.last_user_prompt = prompt
 
+    if show_progress:
+        print(f"[status] model={state.model_name}, multi_agent={'on' if state.enable_multi_agent else 'off'}", flush=True)
+        print("[status] 에이전트와 컨텍스트 준비 중...", flush=True)
     agent = cache.get(state)
     files = get_harness_skill_files()
     files.update(state.attached_files)
@@ -196,13 +211,42 @@ def invoke_chat(cache: ChatAgentCache, state: ChatState, prompt: str) -> str:
             model_name=state.model_name,
             multi_agent=state.enable_multi_agent,
         )
-    response = agent.invoke(
-        {
-            "messages": state.messages,
-            "files": files,
-        }
+
+    request = {
+        "messages": state.messages,
+        "files": files,
+    }
+    printed_header = False
+
+    def print_status(message: str) -> None:
+        if show_progress:
+            print(f"[status] {message}", flush=True)
+
+    def print_delta(delta: str) -> None:
+        nonlocal printed_header
+        if not stream_to_console:
+            return
+        if not printed_header:
+            print("")
+            print("assistant>")
+            print("-" * 78)
+            printed_header = True
+        print(delta, end="", flush=True)
+
+    result, streamed = invoke_agent_text(
+        agent,
+        request,
+        on_delta=print_delta if stream_to_console else None,
+        on_status=print_status,
     )
-    result = format_agent_result(response)
+    if stream_to_console:
+        if not streamed:
+            print("")
+            print("assistant>")
+            print("-" * 78)
+            print(result)
+        print("")
+        print("-" * 78)
     state.messages.append({"role": "assistant", "content": result})
 
     save_wiki_record(
@@ -213,6 +257,10 @@ def invoke_chat(cache: ChatAgentCache, state: ChatState, prompt: str) -> str:
         goal_title=str(state.goal.get("title") or ""),
     )
     return result
+
+
+def run_chat_interactive(cache: ChatAgentCache, state: ChatState, prompt: str) -> None:
+    invoke_chat(cache, state, prompt, show_progress=True, stream_to_console=True)
 
 
 def resolve_workspace_path(state: ChatState, value: str) -> Path:
@@ -842,7 +890,7 @@ def handle_command(command: str, cache: ChatAgentCache, state: ChatState) -> boo
         if prompt:
             print("Loaded prompt. Sending...")
             try:
-                wrap_print(invoke_chat(cache, state, prompt))
+                run_chat_interactive(cache, state, prompt)
             except Exception as exc:
                 print(f"Run failed: {exc}")
     elif name == "/save":
@@ -892,7 +940,7 @@ def handle_command(command: str, cache: ChatAgentCache, state: ChatState) -> boo
         prompt = read_paste()
         if prompt:
             try:
-                wrap_print(invoke_chat(cache, state, prompt))
+                run_chat_interactive(cache, state, prompt)
             except Exception as exc:
                 print(f"Run failed: {exc}")
     else:
@@ -928,7 +976,7 @@ def main() -> None:
             continue
 
         try:
-            wrap_print(invoke_chat(cache, state, user_input))
+            run_chat_interactive(cache, state, user_input)
         except Exception as exc:
             print(f"Run failed: {exc}")
 

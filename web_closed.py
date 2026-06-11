@@ -45,6 +45,10 @@ WIKI_LOG_STYLE = os.getenv("WIKI_LOG_STYLE", "vllm")
 PLAN_DIR = Path(os.getenv("PLAN_DIR", "plans"))
 WORKSPACE_DIR = Path(os.getenv("CHAT_WORKSPACE_DIR", "agent_workspace"))
 MASK_SENSITIVE_LOGS = os.getenv("MASK_SENSITIVE_LOGS", "true").lower() in ("1", "true", "yes", "y")
+try:
+    STREAM_CHUNK_CHARS = max(400, int(os.getenv("STREAM_CHUNK_CHARS", "1800")))
+except ValueError:
+    STREAM_CHUNK_CHARS = 1800
 
 HTML = """<!doctype html>
 <html lang="ko">
@@ -434,6 +438,103 @@ HTML = """<!doctype html>
       return data;
     }
 
+    function parseSseBlock(block) {
+      let eventName = "message";
+      const dataLines = [];
+      for (const rawLine of block.split("\\n")) {
+        const line = rawLine.endsWith("\\r") ? rawLine.slice(0, -1) : rawLine;
+        if (line.startsWith("event:")) {
+          eventName = line.slice(6).trim();
+        } else if (line.startsWith("data:")) {
+          dataLines.push(line.slice(5).trimStart());
+        }
+      }
+      const dataText = dataLines.join("\\n");
+      let data = dataText;
+      try {
+        data = dataText ? JSON.parse(dataText) : {};
+      } catch (_) {
+        data = { text: dataText };
+      }
+      return { eventName, data };
+    }
+
+    async function postEventStream(url, payload, onEvent) {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "text/event-stream",
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok || !response.body) {
+        let message = "요청 실패";
+        try {
+          const data = await response.json();
+          message = data.error || message;
+        } catch (_) {
+          message = await response.text();
+        }
+        throw new Error(message);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) {
+          break;
+        }
+        buffer += decoder.decode(value, { stream: true });
+        const blocks = buffer.split("\\n\\n");
+        buffer = blocks.pop() || "";
+        for (const block of blocks) {
+          if (!block.trim()) {
+            continue;
+          }
+          const parsed = parseSseBlock(block);
+          onEvent(parsed.eventName, parsed.data);
+        }
+      }
+      buffer += decoder.decode();
+      if (buffer.trim()) {
+        const parsed = parseSseBlock(buffer);
+        onEvent(parsed.eventName, parsed.data);
+      }
+    }
+
+    async function runAgentStream(url, payload, actionButton, initialStatus) {
+      actionButton.disabled = true;
+      statusText.textContent = initialStatus;
+      result.textContent = "";
+      let receivedText = false;
+      try {
+        await postEventStream(url, payload, (eventName, data) => {
+          if (eventName === "status") {
+            statusText.textContent = data.message || "실행 중...";
+          } else if (eventName === "delta") {
+            if (!receivedText) {
+              result.textContent = "";
+              receivedText = true;
+            }
+            result.textContent += data.text || "";
+            result.scrollTop = result.scrollHeight;
+          } else if (eventName === "done") {
+            statusText.textContent = data.wiki_path ? `완료 / 기록 저장: ${data.wiki_path}` : "완료";
+          } else if (eventName === "error") {
+            throw new Error(data.error || "실행 실패");
+          }
+        });
+      } catch (error) {
+        result.textContent = receivedText ? `${result.textContent}\\n\\n오류: ${error.message}` : `오류: ${error.message}`;
+        statusText.textContent = "실패";
+      } finally {
+        actionButton.disabled = false;
+      }
+    }
+
     button.addEventListener("click", async () => {
       const prompt = promptInput.value.trim();
       if (!prompt) {
@@ -441,25 +542,17 @@ HTML = """<!doctype html>
         return;
       }
 
-      button.disabled = true;
-      statusText.textContent = "실행 중...";
-      result.textContent = "Qwen 3.5 API 응답을 기다리는 중입니다.";
-
-      try {
-        const data = await postJson("/api/run", {
+      await runAgentStream(
+        "/api/run-stream",
+        {
           prompt,
           model: modelSelect.value,
           multi_agent: multiAgent.checked,
           ...collectOpsContext(),
-        });
-        result.textContent = data.result;
-        statusText.textContent = data.wiki_path ? `완료 / 기록 저장: ${data.wiki_path}` : "완료";
-      } catch (error) {
-        result.textContent = `오류: ${error.message}`;
-        statusText.textContent = "실패";
-      } finally {
-        button.disabled = false;
-      }
+        },
+        button,
+        "스트리밍 연결 중..."
+      );
     });
 
     savedPrompts.addEventListener("change", () => {
@@ -571,21 +664,15 @@ HTML = """<!doctype html>
         result.textContent = "요청 내용을 입력하세요.";
         return;
       }
-      runScaffoldButton.disabled = true;
-      statusText.textContent = "생성 후 실행 중...";
-      try {
-        const data = await postJson("/api/scaffold/run", {
+      await runAgentStream(
+        "/api/scaffold/run-stream",
+        {
           prompt,
           ...collectOpsContext(),
-        });
-        result.textContent = data.result;
-        statusText.textContent = data.wiki_path ? `완료 / 기록 저장: ${data.wiki_path}` : "완료";
-      } catch (error) {
-        result.textContent = `생성 후 실행 실패: ${error.message}`;
-        statusText.textContent = "실패";
-      } finally {
-        runScaffoldButton.disabled = false;
-      }
+        },
+        runScaffoldButton,
+        "파일 생성 후 스트리밍 실행 중..."
+      );
     });
 
     catalogButton.addEventListener("click", async () => {
@@ -761,6 +848,91 @@ def format_agent_result(result) -> str:
             if content:
                 return str(content)
     return str(result)
+
+
+def extract_stream_text(chunk, depth: int = 0) -> str:
+    if depth > 4:
+        return ""
+    if isinstance(chunk, str):
+        return chunk
+    content = getattr(chunk, "content", None)
+    if isinstance(content, str):
+        return content
+    if isinstance(chunk, list):
+        for item in reversed(chunk):
+            text = extract_stream_text(item, depth + 1)
+            if text:
+                return text
+        return ""
+    if isinstance(chunk, dict):
+        for key in ("content", "delta", "text"):
+            value = chunk.get(key)
+            if isinstance(value, str):
+                return value
+        messages = chunk.get("messages")
+        if isinstance(messages, list) and messages:
+            last_message = messages[-1]
+            if isinstance(last_message, dict) and isinstance(last_message.get("content"), str):
+                return last_message["content"]
+            message_content = getattr(last_message, "content", None)
+            if isinstance(message_content, str):
+                return message_content
+        for value in chunk.values():
+            if isinstance(value, (dict, list)):
+                text = extract_stream_text(value, depth + 1)
+                if text:
+                    return text
+    return ""
+
+
+def iter_text_chunks(value: str, chunk_size: int = STREAM_CHUNK_CHARS):
+    text = str(value)
+    for index in range(0, len(text), chunk_size):
+        yield text[index : index + chunk_size]
+
+
+def invoke_agent_text(agent, request: dict, on_delta=None, on_status=None) -> tuple[str, bool]:
+    stream = getattr(agent, "stream", None)
+    if not callable(stream):
+        if on_status:
+            on_status("모델 응답 대기 중...")
+        return format_agent_result(agent.invoke(request)), False
+
+    last_chunk = None
+    last_text = ""
+    saw_text = False
+    streamed = False
+    try:
+        if on_status:
+            on_status("모델 스트림 수신 중...")
+        for chunk in stream(request):
+            last_chunk = chunk
+            text = extract_stream_text(chunk)
+            if not text:
+                continue
+            saw_text = True
+            if text.startswith(last_text):
+                delta = text[len(last_text) :]
+                last_text = text
+            else:
+                delta = text
+                last_text += text
+            if delta and on_delta:
+                streamed = True
+                on_delta(delta)
+        if saw_text:
+            return last_text, streamed
+        if streamed:
+            return last_text, True
+        if last_chunk is not None:
+            return format_agent_result(last_chunk), False
+    except Exception as exc:
+        if on_status:
+            on_status(f"스트림 수신 실패, 일반 호출로 전환: {exc}")
+
+    if on_status:
+        on_status("일반 호출로 최종 응답 대기 중...")
+    return format_agent_result(agent.invoke(request)), False
 
 
 def load_prompt_store() -> list[dict[str, str]]:
@@ -1066,6 +1238,7 @@ class AgentHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         if self.path not in (
             "/api/run",
+            "/api/run-stream",
             "/api/test-model",
             "/api/catalog",
             "/api/experiment",
@@ -1073,6 +1246,7 @@ class AgentHandler(BaseHTTPRequestHandler):
             "/api/scaffold/preview",
             "/api/scaffold/apply",
             "/api/scaffold/run",
+            "/api/scaffold/run-stream",
             "/api/register/scan",
             "/api/register/scaffold",
             "/api/register/fix-log",
@@ -1115,8 +1289,14 @@ class AgentHandler(BaseHTTPRequestHandler):
             if self.path == "/api/scaffold/apply":
                 self._scaffold(payload, write_files=True)
                 return
+            if self.path == "/api/run-stream":
+                self._run_stream(payload)
+                return
             if self.path == "/api/scaffold/run":
                 self._scaffold_run(payload)
+                return
+            if self.path == "/api/scaffold/run-stream":
+                self._scaffold_run_stream(payload)
                 return
             if self.path == "/api/register/scan":
                 self._register_scan(payload)
@@ -1168,6 +1348,33 @@ class AgentHandler(BaseHTTPRequestHandler):
             self._send_json({"result": result_text, "wiki_path": wiki_path})
         except Exception as exc:
             self._send_json({"error": str(exc)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+
+    def _run_stream(self, payload: dict) -> None:
+        self._send_sse_headers()
+        try:
+            prompt = str(payload.get("prompt", "")).strip()
+            model_name = str(payload.get("model") or DEFAULT_MODEL).strip()
+            enable_multi_agent = bool(payload.get("multi_agent", True))
+            if not prompt:
+                self._send_sse("error", {"error": "prompt 값이 비어 있습니다."})
+                return
+            if model_name not in MODEL_OPTIONS:
+                self._send_sse("error", {"error": f"등록되지 않은 모델입니다: {model_name}"})
+                return
+
+            self._send_sse("status", {"message": "컨텍스트 파일 구성 중..."})
+            files = build_context_files(payload, model_name=model_name, enable_multi_agent=enable_multi_agent)
+            self._stream_agent_result(
+                prompt=prompt,
+                model_name=model_name,
+                enable_multi_agent=enable_multi_agent,
+                files=files,
+                goal_title=str((payload.get("goal") or {}).get("title", "")),
+            )
+        except Exception as exc:
+            self._send_sse("error", {"error": str(exc)})
+        finally:
+            self.close_connection = True
 
     def _save_prompt(self, payload: dict) -> None:
         name = str(payload.get("name", "")).strip()
@@ -1280,6 +1487,98 @@ class AgentHandler(BaseHTTPRequestHandler):
         payload_data.update({"result": result_text, "wiki_path": wiki_path})
         self._send_json(payload_data)
 
+    def _scaffold_run_stream(self, payload: dict) -> None:
+        self._send_sse_headers()
+        try:
+            prompt = str(payload.get("prompt", "")).strip()
+            model_name = str(payload.get("model") or DEFAULT_MODEL).strip()
+            enable_multi_agent = bool(payload.get("multi_agent", True))
+            if not prompt:
+                self._send_sse("error", {"error": "prompt 값이 비어 있습니다."})
+                return
+            if model_name not in MODEL_OPTIONS:
+                self._send_sse("error", {"error": f"등록되지 않은 모델입니다: {model_name}"})
+                return
+
+            self._send_sse("status", {"message": "폴더와 파일 자동 생성 중..."})
+            spec, scaffold_result = scaffold_payload(
+                payload,
+                model_name=model_name,
+                enable_multi_agent=enable_multi_agent,
+                write_files=True,
+            )
+            files = build_context_files(payload, model_name=model_name, enable_multi_agent=enable_multi_agent)
+            files.update(scaffold_to_context_files(WORKSPACE_DIR, scaffold_result))
+            if spec.goal.get("title"):
+                files["/goals/current-goal.md"] = goal_to_markdown(
+                    spec.goal,
+                    model_name=model_name,
+                    multi_agent=enable_multi_agent,
+                )
+            if spec.plan_steps:
+                files["/plans/current-plan.md"] = render_web_plan_markdown(
+                    {"title": spec.plan_title, "steps": spec.plan_steps},
+                    model_name=model_name,
+                    enable_multi_agent=enable_multi_agent,
+                )
+            self._send_sse(
+                "status",
+                {"message": f"자동 생성 완료: {len(scaffold_result.created_files)}개 파일 컨텍스트 첨부"},
+            )
+            self._stream_agent_result(
+                prompt=prompt,
+                model_name=model_name,
+                enable_multi_agent=enable_multi_agent,
+                files=files,
+                goal_title=str(spec.goal.get("title") or (payload.get("goal") or {}).get("title", "")),
+            )
+        except Exception as exc:
+            self._send_sse("error", {"error": str(exc)})
+        finally:
+            self.close_connection = True
+
+    def _stream_agent_result(
+        self,
+        *,
+        prompt: str,
+        model_name: str,
+        enable_multi_agent: bool,
+        files: dict[str, str],
+        goal_title: str = "",
+    ) -> None:
+        self._send_sse("status", {"message": f"{model_name} 에이전트 준비 중..."})
+        agent = self._get_agent(model_name, enable_multi_agent)
+        request = {
+            "messages": [{"role": "user", "content": prompt}],
+            "files": files,
+        }
+
+        def send_delta(delta: str) -> None:
+            for chunk in iter_text_chunks(delta):
+                self._send_sse("delta", {"text": chunk})
+
+        def send_status(message: str) -> None:
+            self._send_sse("status", {"message": message})
+
+        result_text, streamed = invoke_agent_text(
+            agent,
+            request,
+            on_delta=send_delta,
+            on_status=send_status,
+        )
+        if not streamed:
+            self._send_sse("status", {"message": "최종 응답 표시 중..."})
+            send_delta(result_text)
+
+        wiki_path = save_wiki_record(
+            prompt=prompt,
+            result=result_text,
+            model_name=model_name,
+            enable_multi_agent=enable_multi_agent,
+            goal_title=goal_title,
+        )
+        self._send_sse("done", {"wiki_path": wiki_path})
+
     def _experiment(self, payload: dict) -> None:
         prompt = str(payload.get("prompt", "")).strip()
         if not prompt:
@@ -1383,6 +1682,19 @@ class AgentHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _send_sse_headers(self) -> None:
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+
+    def _send_sse(self, event_name: str, payload: dict) -> None:
+        data = json.dumps(payload, ensure_ascii=False)
+        body = f"event: {event_name}\ndata: {data}\n\n".encode("utf-8")
+        self.wfile.write(body)
+        self.wfile.flush()
 
     @classmethod
     def _get_agent(cls, model_name: str, enable_multi_agent: bool):

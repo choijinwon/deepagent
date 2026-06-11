@@ -172,6 +172,7 @@ ENABLE_MULTI_AGENT=true
 ENABLE_HARNESS_SKILLS=true
 WEB_HOST=127.0.0.1
 WEB_PORT=8000
+STREAM_CHUNK_CHARS=1800
 PROMPT_STORE_PATH=prompt_templates.json
 WIKI_LOG_DIR=wiki_logs
 WIKI_LOG_STYLE=vllm
@@ -290,6 +291,11 @@ http://127.0.0.1:8000
 웹 화면에서는 `.env`의 `QWEN_MODELS`에 등록된 모델을 드롭다운으로 선택할 수 있습니다.
 
 `모델 연결 테스트` 버튼은 선택한 모델로 짧은 요청을 보내 API Key, Base URL, 모델명 설정이 맞는지 확인합니다.
+
+폐쇄망 API 응답이 느린 환경을 고려해 `실행`과 `생성 후 실행`은 JSON 폴링이 아니라 SSE 스트리밍으로 동작합니다.
+서버는 상태 메시지를 먼저 보내고, 모델이 스트리밍을 지원하면 응답 조각을 즉시 화면에 붙입니다.
+스트리밍 미지원 모델이면 최종 응답을 받은 뒤 브라우저에 조각 단위로 전달하므로 긴 텍스트가 JSON 응답 크기 문제로 잘리는 상황을 피할 수 있습니다.
+`STREAM_CHUNK_CHARS`는 화면 전송 조각 크기이며, 위키 로그에 저장되는 최종 결과 원문은 줄이지 않습니다.
 
 멀티에이전트 사용을 켜면 메인 에이전트가 필요할 때 아래 서브에이전트로 작업을 위임합니다.
 
@@ -428,7 +434,8 @@ python chat_cli.py
 ```
 
 일반 문장을 입력하면 바로 모델에 전송됩니다.
-응답은 화면에 출력되고 `wiki_logs/`에도 vLLM 위키 Markdown 기록으로 저장됩니다.
+일반 문장을 입력하면 CLI도 상태를 즉시 출력하고, 모델 스트리밍이 가능할 때는 답변 조각을 바로 화면에 표시합니다.
+응답 원문은 `wiki_logs/`에도 vLLM 위키 Markdown 기록으로 저장됩니다.
 
 작업 폴더와 플랜 저장 위치는 `.env`에서 바꿀 수 있습니다.
 
