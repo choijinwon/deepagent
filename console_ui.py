@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 from app_closed import (
     build_agent,
@@ -9,6 +10,9 @@ from app_closed import (
     get_harness_skill_names,
     harness_skills_enabled,
 )
+from ops_common import session_dir
+from project_wizard import run_project_wizard
+from scaffold_common import apply_scaffold, parse_scaffold_text, render_scaffold_summary
 from web_closed import invoke_agent_text, load_prompt_store, save_prompt_store, save_wiki_record
 from ui_common import MarkdownStream, print_key_value_table, print_markdown_result, print_status_line
 
@@ -21,6 +25,8 @@ class ConsoleState:
     model_name: str
     enable_multi_agent: bool = True
     prompt: str = DEFAULT_PROMPT
+    workspace_dir: Path = Path("agent_workspace")
+    plan_dir: Path = Path("plans")
 
 
 class ConsoleAgentCache:
@@ -47,6 +53,7 @@ def print_header(state: ConsoleState) -> None:
             ("Multi Agent", "ON" if state.enable_multi_agent else "OFF"),
             ("Harness Skills", "ON" if harness_skills_enabled() else "OFF"),
             ("Skill List", ", ".join(get_harness_skill_names()) or "none"),
+            ("Workspace", str(state.workspace_dir)),
         ],
     )
 
@@ -88,6 +95,17 @@ def edit_prompt(state: ConsoleState) -> None:
         print("프롬프트가 변경되었습니다.")
     else:
         print("변경하지 않았습니다.")
+
+
+def read_dot_paste() -> str:
+    print_status_line("내용을 붙여넣고 마지막 줄에 점 하나(.)만 입력하세요.", "cyan")
+    lines = []
+    while True:
+        line = input()
+        if line == ".":
+            break
+        lines.append(line)
+    return "\n".join(lines).strip()
 
 
 def show_prompt(state: ConsoleState) -> None:
@@ -243,6 +261,52 @@ def toggle_harness_skills() -> None:
     print(f"하네스 스킬: {'ON' if next_value else 'OFF'}")
 
 
+def run_project_console(state: ConsoleState, *, preview: bool = False) -> None:
+    try:
+        spec, _, result, summary = run_project_wizard(
+            workspace_dir=state.workspace_dir,
+            plan_dir=state.plan_dir,
+            session_path=session_dir(),
+            model_name=state.model_name,
+            enable_multi_agent=state.enable_multi_agent,
+            write_files=not preview,
+        )
+    except Exception as exc:
+        print(f"프로젝트 생성 실패: {exc}")
+        return
+
+    print_markdown_result("프로젝트 미리보기" if preview else "프로젝트 생성", summary, border_style="cyan")
+    if not preview:
+        print_status_line(f"프로젝트 생성 완료: {spec.name}", "green")
+        if result.summary_path:
+            print_status_line(f"요약 파일: {result.summary_path}", "green")
+
+
+def run_scaffold_console(state: ConsoleState, *, preview: bool = False) -> None:
+    text = read_dot_paste()
+    if not text:
+        print("입력 내용이 비어 있습니다.")
+        return
+    try:
+        spec = parse_scaffold_text(text)
+        result = apply_scaffold(
+            spec,
+            state.workspace_dir,
+            plan_dir=state.plan_dir,
+            session_dir=session_dir(),
+            model_name=state.model_name,
+            enable_multi_agent=state.enable_multi_agent,
+            write_files=not preview,
+        )
+    except Exception as exc:
+        print(f"작업 생성 실패: {exc}")
+        return
+
+    print_markdown_result("작업 생성 미리보기" if preview else "작업 생성", render_scaffold_summary(spec, result), border_style="cyan")
+    if not preview and result.summary_path:
+        print_status_line(f"요약 파일: {result.summary_path}", "green")
+
+
 def wait_enter() -> None:
     input("\n계속하려면 Enter를 누르세요.")
 
@@ -251,6 +315,8 @@ def main() -> None:
     state = ConsoleState(
         model_name=get_default_model(),
         enable_multi_agent=os.getenv("ENABLE_MULTI_AGENT", "true").lower() in ("1", "true", "yes", "y"),
+        workspace_dir=Path(os.getenv("CHAT_WORKSPACE_DIR", "agent_workspace")).resolve(),
+        plan_dir=Path(os.getenv("PLAN_DIR", "plans")).resolve(),
     )
     cache = ConsoleAgentCache()
 
@@ -266,6 +332,10 @@ def main() -> None:
         print("8. 하네스 스킬 ON/OFF")
         print("9. 모델 연결 테스트")
         print("10. 실행")
+        print("11. 질문형 프로젝트 생성")
+        print("12. 질문형 프로젝트 미리보기")
+        print("13. 아이디어 붙여넣기로 폴더/파일 생성")
+        print("14. 아이디어 생성 미리보기")
         print("0. 종료")
 
         choice = input("\n선택: ").strip()
@@ -298,6 +368,18 @@ def main() -> None:
             wait_enter()
         elif choice == "10":
             run_prompt(cache, state)
+            wait_enter()
+        elif choice == "11":
+            run_project_console(state, preview=False)
+            wait_enter()
+        elif choice == "12":
+            run_project_console(state, preview=True)
+            wait_enter()
+        elif choice == "13":
+            run_scaffold_console(state, preview=False)
+            wait_enter()
+        elif choice == "14":
+            run_scaffold_console(state, preview=True)
             wait_enter()
         elif choice == "0":
             print("종료합니다.")

@@ -408,6 +408,8 @@ deepagent-console
 - 하네스 스킬 ON/OFF
 - 모델 연결 테스트
 - 실행 결과를 vLLM 위키 Markdown으로 자동 기록
+- 질문형 프로젝트 생성/미리보기
+- 아이디어 붙여넣기 기반 폴더/파일 생성/미리보기
 
 콘솔 UI는 무료 오픈소스 `rich` 라이브러리를 사용해 Markdown, 표, 패널, 코드블록을 보기 좋게 표시합니다.
 `rich` wheel은 `requirements.txt`에 포함되어 외부 PC의 `prepare_external_pc.ps1` 실행 시 `offline_packages/`에 함께 다운로드됩니다.
