@@ -18,6 +18,7 @@ deepagent/
 ├─ web_closed.py
 ├─ console_ui.py
 ├─ chat_cli.py
+├─ launcher_cli.py
 ├─ doctor.py
 ├─ ops_common.py
 ├─ ml_common.py
@@ -162,14 +163,27 @@ deepagent-doctor
 가상환경이 활성화되어 있으면 아래 명령을 터미널에서 바로 사용할 수 있습니다.
 
 ```powershell
-deepagent          # 챗봇형 CLI
-deepagents         # 챗봇형 CLI 별칭
-deepagent-chat     # 챗봇형 CLI 별칭
+deepagent          # 선택 메뉴 런처
+deepagents         # 선택 메뉴 런처 별칭
+deepagent-menu     # 선택 메뉴 런처 별칭
+deepagent-chat     # 챗봇형 CLI 직접 실행
 deepagent-console  # 메뉴형 콘솔 UI
 deepagent-web      # 웹 UI 실행
 deepagent-doctor   # 폐쇄망 환경 진단
 deepagent-run      # 기본 단발 실행 테스트
 deepagent-scaffold # 아이디어 붙여넣기로 폴더/파일 자동 생성
+```
+
+명령을 외우기 어렵다면 `deepagent`만 실행하세요.
+아래처럼 번호로 선택할 수 있는 런처가 뜹니다.
+
+```text
+1. 챗봇형 CLI
+2. 웹 UI
+3. 메뉴형 콘솔 UI
+4. 아이디어로 폴더/파일 생성
+5. 폐쇄망 환경 진단
+6. 기본 단발 실행 테스트
 ```
 
 ## 5. .env 생성
@@ -403,7 +417,7 @@ ENABLE_RICH_CONSOLE=false
 Claude 스타일의 대화형 CLI가 필요하면 아래 명령을 실행합니다.
 
 ```powershell
-deepagent
+deepagent-chat
 ```
 
 대화형 CLI 명령:
