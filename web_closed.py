@@ -214,19 +214,119 @@ HTML = """<!doctype html>
       color: #526173;
       font-size: 14px;
     }
-    pre {
+    .result-view {
       min-height: 180px;
       margin: 18px 0 0;
       padding: 16px;
       overflow: auto;
-      white-space: pre-wrap;
-      word-break: break-word;
       border: 1px solid #dce3ef;
       border-radius: 6px;
-      background: #f8fafc;
+      background: #ffffff;
+      color: #172033;
       line-height: 1.6;
-      font-family: "Cascadia Mono", Consolas, monospace;
       font-size: 14px;
+    }
+    .result-view > *:first-child {
+      margin-top: 0;
+    }
+    .result-view > *:last-child {
+      margin-bottom: 0;
+    }
+    .result-view h1,
+    .result-view h2,
+    .result-view h3 {
+      margin: 18px 0 10px;
+      line-height: 1.25;
+      color: #102033;
+    }
+    .result-view h1 {
+      padding-bottom: 8px;
+      border-bottom: 1px solid #dce3ef;
+      font-size: 22px;
+    }
+    .result-view h2 {
+      font-size: 18px;
+    }
+    .result-view h3 {
+      font-size: 16px;
+    }
+    .result-view p {
+      margin: 9px 0;
+    }
+    .result-view ul,
+    .result-view ol {
+      margin: 8px 0 12px 22px;
+      padding: 0;
+    }
+    .result-view li {
+      margin: 4px 0;
+      padding-left: 2px;
+    }
+    .result-view blockquote {
+      margin: 12px 0;
+      padding: 8px 12px;
+      border-left: 4px solid #7aa7e8;
+      background: #f3f7fd;
+      color: #344154;
+    }
+    .result-view code {
+      padding: 2px 5px;
+      border-radius: 4px;
+      background: #eef3f8;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 0.92em;
+    }
+    .result-view pre {
+      margin: 12px 0;
+      padding: 13px;
+      overflow-x: auto;
+      white-space: pre;
+      border: 1px solid #d6deea;
+      border-radius: 6px;
+      background: #101827;
+      color: #f6f8fb;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .result-view pre code {
+      padding: 0;
+      background: transparent;
+      color: inherit;
+      font-size: inherit;
+    }
+    .result-view table {
+      width: 100%;
+      margin: 12px 0;
+      border-collapse: collapse;
+      display: block;
+      overflow-x: auto;
+      border: 1px solid #dce3ef;
+      border-radius: 6px;
+    }
+    .result-view th,
+    .result-view td {
+      padding: 9px 10px;
+      border-bottom: 1px solid #e6ebf3;
+      border-right: 1px solid #e6ebf3;
+      text-align: left;
+      vertical-align: top;
+      min-width: 120px;
+    }
+    .result-view th {
+      background: #f1f5fb;
+      color: #102033;
+      font-weight: 700;
+    }
+    .result-view tr:last-child td {
+      border-bottom: 0;
+    }
+    .result-view .task-checkbox {
+      margin-right: 7px;
+      transform: translateY(1px);
+    }
+    .result-view .empty-result {
+      color: #718096;
     }
     @media (max-width: 680px) {
       .controls,
@@ -327,7 +427,7 @@ HTML = """<!doctype html>
         <button id="download" class="ghost" type="button">결과 다운로드</button>
         <span id="status" class="status">대기 중</span>
       </div>
-      <pre id="result">결과가 여기에 표시됩니다.</pre>
+      <div id="result" class="result-view">결과가 여기에 표시됩니다.</div>
     </section>
   </main>
   <script>
@@ -365,9 +465,194 @@ HTML = """<!doctype html>
     const scaffoldText = document.getElementById("scaffoldText");
     const registerPath = document.getElementById("registerPath");
     const registerLogPath = document.getElementById("registerLogPath");
+    let rawResultText = "결과가 여기에 표시됩니다.";
 
     function lineList(value) {
       return value.split("\\n").map((item) => item.trim()).filter(Boolean);
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function renderInlineMarkdown(value) {
+      let html = escapeHtml(value);
+      html = html.replace(/`([^`]+)`/g, "<code>$1</code>");
+      html = html.replace(/\\*\\*([^*]+)\\*\\*/g, "<strong>$1</strong>");
+      html = html.replace(/\\[([^\\]]+)\\]\\(([^)\\s]+)\\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+      return html;
+    }
+
+    function isTableSeparator(line) {
+      return /^\\s*\\|?\\s*:?-{3,}:?\\s*(\\|\\s*:?-{3,}:?\\s*)+\\|?\\s*$/.test(line);
+    }
+
+    function splitTableRow(line) {
+      let text = line.trim();
+      if (text.startsWith("|")) {
+        text = text.slice(1);
+      }
+      if (text.endsWith("|")) {
+        text = text.slice(0, -1);
+      }
+      return text.split("|").map((cell) => cell.trim());
+    }
+
+    function flushParagraph(parts, html) {
+      if (parts.length) {
+        html.push(`<p>${renderInlineMarkdown(parts.join(" "))}</p>`);
+        parts.length = 0;
+      }
+    }
+
+    function renderMarkdown(markdown) {
+      const text = String(markdown || "").trimEnd();
+      if (!text.trim()) {
+        return '<p class="empty-result">결과가 여기에 표시됩니다.</p>';
+      }
+
+      const lines = text.split("\\n");
+      const html = [];
+      const paragraph = [];
+      let listType = "";
+      let listOpen = false;
+      let inCode = false;
+      let codeLines = [];
+
+      function closeList() {
+        if (listOpen) {
+          html.push(`</${listType}>`);
+          listOpen = false;
+          listType = "";
+        }
+      }
+
+      function openList(type) {
+        if (!listOpen || listType !== type) {
+          closeList();
+          listType = type;
+          listOpen = true;
+          html.push(`<${type}>`);
+        }
+      }
+
+      for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index];
+        const trimmed = line.trim();
+
+        if (trimmed.startsWith("```")) {
+          if (inCode) {
+            html.push(`<pre><code>${escapeHtml(codeLines.join("\\n"))}</code></pre>`);
+            codeLines = [];
+            inCode = false;
+          } else {
+            flushParagraph(paragraph, html);
+            closeList();
+            inCode = true;
+          }
+          continue;
+        }
+        if (inCode) {
+          codeLines.push(line);
+          continue;
+        }
+
+        if (!trimmed) {
+          flushParagraph(paragraph, html);
+          closeList();
+          continue;
+        }
+
+        if (line.includes("|") && index + 1 < lines.length && isTableSeparator(lines[index + 1])) {
+          flushParagraph(paragraph, html);
+          closeList();
+          const headers = splitTableRow(line);
+          index += 2;
+          const rows = [];
+          while (index < lines.length && lines[index].includes("|") && lines[index].trim()) {
+            rows.push(splitTableRow(lines[index]));
+            index += 1;
+          }
+          index -= 1;
+          html.push("<table><thead><tr>");
+          for (const header of headers) {
+            html.push(`<th>${renderInlineMarkdown(header)}</th>`);
+          }
+          html.push("</tr></thead><tbody>");
+          for (const row of rows) {
+            html.push("<tr>");
+            for (let cellIndex = 0; cellIndex < headers.length; cellIndex += 1) {
+              html.push(`<td>${renderInlineMarkdown(row[cellIndex] || "")}</td>`);
+            }
+            html.push("</tr>");
+          }
+          html.push("</tbody></table>");
+          continue;
+        }
+
+        const heading = /^(#{1,3})\\s+(.+)$/.exec(trimmed);
+        if (heading) {
+          flushParagraph(paragraph, html);
+          closeList();
+          const level = heading[1].length;
+          html.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
+          continue;
+        }
+
+        const quote = /^>\\s?(.+)$/.exec(trimmed);
+        if (quote) {
+          flushParagraph(paragraph, html);
+          closeList();
+          html.push(`<blockquote>${renderInlineMarkdown(quote[1])}</blockquote>`);
+          continue;
+        }
+
+        const unordered = /^[-*]\\s+(\\[[ xX]\\]\\s+)?(.+)$/.exec(trimmed);
+        if (unordered) {
+          flushParagraph(paragraph, html);
+          openList("ul");
+          const checkbox = unordered[1]
+            ? `<input class="task-checkbox" type="checkbox" disabled ${/\\[[xX]\\]/.test(unordered[1]) ? "checked" : ""}>`
+            : "";
+          html.push(`<li>${checkbox}${renderInlineMarkdown(unordered[2])}</li>`);
+          continue;
+        }
+
+        const ordered = /^\\d+[.)]\\s+(.+)$/.exec(trimmed);
+        if (ordered) {
+          flushParagraph(paragraph, html);
+          openList("ol");
+          html.push(`<li>${renderInlineMarkdown(ordered[1])}</li>`);
+          continue;
+        }
+
+        closeList();
+        paragraph.push(trimmed);
+      }
+
+      if (inCode) {
+        html.push(`<pre><code>${escapeHtml(codeLines.join("\\n"))}</code></pre>`);
+      }
+      flushParagraph(paragraph, html);
+      closeList();
+      return html.join("");
+    }
+
+    function setResultText(value) {
+      rawResultText = String(value ?? "");
+      result.innerHTML = renderMarkdown(rawResultText);
+      result.scrollTop = 0;
+    }
+
+    function appendResultText(value) {
+      rawResultText += String(value ?? "");
+      result.innerHTML = renderMarkdown(rawResultText);
+      result.scrollTop = result.scrollHeight;
     }
 
     function collectOpsContext() {
@@ -508,7 +793,7 @@ HTML = """<!doctype html>
     async function runAgentStream(url, payload, actionButton, initialStatus) {
       actionButton.disabled = true;
       statusText.textContent = initialStatus;
-      result.textContent = "";
+      setResultText("");
       let receivedText = false;
       try {
         await postEventStream(url, payload, (eventName, data) => {
@@ -516,11 +801,10 @@ HTML = """<!doctype html>
             statusText.textContent = data.message || "실행 중...";
           } else if (eventName === "delta") {
             if (!receivedText) {
-              result.textContent = "";
+              setResultText("");
               receivedText = true;
             }
-            result.textContent += data.text || "";
-            result.scrollTop = result.scrollHeight;
+            appendResultText(data.text || "");
           } else if (eventName === "done") {
             statusText.textContent = data.wiki_path ? `완료 / 기록 저장: ${data.wiki_path}` : "완료";
           } else if (eventName === "error") {
@@ -528,7 +812,7 @@ HTML = """<!doctype html>
           }
         });
       } catch (error) {
-        result.textContent = receivedText ? `${result.textContent}\\n\\n오류: ${error.message}` : `오류: ${error.message}`;
+        setResultText(receivedText ? `${rawResultText}\\n\\n오류: ${error.message}` : `오류: ${error.message}`);
         statusText.textContent = "실패";
       } finally {
         actionButton.disabled = false;
@@ -538,7 +822,7 @@ HTML = """<!doctype html>
     button.addEventListener("click", async () => {
       const prompt = promptInput.value.trim();
       if (!prompt) {
-        result.textContent = "요청 내용을 입력하세요.";
+        setResultText("요청 내용을 입력하세요.");
         return;
       }
 
@@ -587,7 +871,7 @@ HTML = """<!doctype html>
         savedPrompts.value = name;
         statusText.textContent = "프롬프트 저장됨";
       } catch (error) {
-        result.textContent = `프롬프트 저장 실패: ${error.message}`;
+        setResultText(`프롬프트 저장 실패: ${error.message}`);
         statusText.textContent = "저장 실패";
       } finally {
         savePromptButton.disabled = false;
@@ -600,7 +884,7 @@ HTML = """<!doctype html>
         const data = await postJson("/api/goals/save", collectOpsContext());
         statusText.textContent = `목표 저장됨: ${data.path}`;
       } catch (error) {
-        result.textContent = `목표 저장 실패: ${error.message}`;
+        setResultText(`목표 저장 실패: ${error.message}`);
         statusText.textContent = "목표 저장 실패";
       } finally {
         saveGoalButton.disabled = false;
@@ -613,7 +897,7 @@ HTML = """<!doctype html>
         const data = await postJson("/api/plans/save", collectOpsContext());
         statusText.textContent = `플랜 저장됨: ${data.path}`;
       } catch (error) {
-        result.textContent = `플랜 저장 실패: ${error.message}`;
+        setResultText(`플랜 저장 실패: ${error.message}`);
         statusText.textContent = "플랜 저장 실패";
       } finally {
         savePlanButton.disabled = false;
@@ -626,7 +910,7 @@ HTML = """<!doctype html>
         scaffoldText.value = data.sample;
         statusText.textContent = "생성기 예시 입력됨";
       } catch (error) {
-        result.textContent = `예시 로드 실패: ${error.message}`;
+        setResultText(`예시 로드 실패: ${error.message}`);
       }
     });
 
@@ -634,10 +918,10 @@ HTML = """<!doctype html>
       previewScaffoldButton.disabled = true;
       try {
         const data = await postJson("/api/scaffold/preview", collectOpsContext());
-        result.textContent = data.summary;
+        setResultText(data.summary);
         statusText.textContent = "생성 미리보기 완료";
       } catch (error) {
-        result.textContent = `미리보기 실패: ${error.message}`;
+        setResultText(`미리보기 실패: ${error.message}`);
         statusText.textContent = "미리보기 실패";
       } finally {
         previewScaffoldButton.disabled = false;
@@ -648,10 +932,10 @@ HTML = """<!doctype html>
       applyScaffoldButton.disabled = true;
       try {
         const data = await postJson("/api/scaffold/apply", collectOpsContext());
-        result.textContent = data.summary;
+        setResultText(data.summary);
         statusText.textContent = `자동 생성 완료: ${data.summary_path}`;
       } catch (error) {
-        result.textContent = `자동 생성 실패: ${error.message}`;
+        setResultText(`자동 생성 실패: ${error.message}`);
         statusText.textContent = "자동 생성 실패";
       } finally {
         applyScaffoldButton.disabled = false;
@@ -661,7 +945,7 @@ HTML = """<!doctype html>
     runScaffoldButton.addEventListener("click", async () => {
       const prompt = promptInput.value.trim();
       if (!prompt) {
-        result.textContent = "요청 내용을 입력하세요.";
+        setResultText("요청 내용을 입력하세요.");
         return;
       }
       await runAgentStream(
@@ -678,17 +962,17 @@ HTML = """<!doctype html>
     catalogButton.addEventListener("click", async () => {
       try {
         const data = await postJson("/api/catalog", {});
-        result.textContent = data.markdown;
+        setResultText(data.markdown);
         statusText.textContent = `모델 카탈로그 저장: ${data.path}`;
       } catch (error) {
-        result.textContent = `카탈로그 실패: ${error.message}`;
+        setResultText(`카탈로그 실패: ${error.message}`);
       }
     });
 
     experimentButton.addEventListener("click", async () => {
       const prompt = promptInput.value.trim();
       if (!prompt) {
-        result.textContent = "비교할 요청 내용을 입력하세요.";
+        setResultText("비교할 요청 내용을 입력하세요.");
         return;
       }
       experimentButton.disabled = true;
@@ -698,10 +982,10 @@ HTML = """<!doctype html>
           prompt,
           ...collectOpsContext(),
         });
-        result.textContent = data.summary;
+        setResultText(data.summary);
         statusText.textContent = `실험 저장: ${data.path}`;
       } catch (error) {
-        result.textContent = `실험 실패: ${error.message}`;
+        setResultText(`실험 실패: ${error.message}`);
         statusText.textContent = "실험 실패";
       } finally {
         experimentButton.disabled = false;
@@ -711,16 +995,16 @@ HTML = """<!doctype html>
     registerScanButton.addEventListener("click", async () => {
       const project_path = registerPath.value.trim();
       if (!project_path) {
-        result.textContent = "프로젝트 경로를 입력하세요.";
+        setResultText("프로젝트 경로를 입력하세요.");
         return;
       }
       registerScanButton.disabled = true;
       try {
         const data = await postJson("/api/register/scan", { project_path });
-        result.textContent = data.report;
+        setResultText(data.report);
         statusText.textContent = "등록 분석 완료";
       } catch (error) {
-        result.textContent = `등록 분석 실패: ${error.message}`;
+        setResultText(`등록 분석 실패: ${error.message}`);
         statusText.textContent = "등록 분석 실패";
       } finally {
         registerScanButton.disabled = false;
@@ -730,16 +1014,16 @@ HTML = """<!doctype html>
     registerScaffoldButton.addEventListener("click", async () => {
       const project_path = registerPath.value.trim();
       if (!project_path) {
-        result.textContent = "프로젝트 경로를 입력하세요.";
+        setResultText("프로젝트 경로를 입력하세요.");
         return;
       }
       registerScaffoldButton.disabled = true;
       try {
         const data = await postJson("/api/register/scaffold", { project_path });
-        result.textContent = data.report;
+        setResultText(data.report);
         statusText.textContent = `등록 구조 생성: ${data.workspace}`;
       } catch (error) {
-        result.textContent = `등록 구조 생성 실패: ${error.message}`;
+        setResultText(`등록 구조 생성 실패: ${error.message}`);
         statusText.textContent = "등록 구조 생성 실패";
       } finally {
         registerScaffoldButton.disabled = false;
@@ -749,16 +1033,16 @@ HTML = """<!doctype html>
     registerFixLogButton.addEventListener("click", async () => {
       const log_path = registerLogPath.value.trim();
       if (!log_path) {
-        result.textContent = "오류 로그 파일 경로를 입력하세요.";
+        setResultText("오류 로그 파일 경로를 입력하세요.");
         return;
       }
       registerFixLogButton.disabled = true;
       try {
         const data = await postJson("/api/register/fix-log", { log_path });
-        result.textContent = data.report;
+        setResultText(data.report);
         statusText.textContent = `오류 분석 저장: ${data.path}`;
       } catch (error) {
-        result.textContent = `오류 로그 분석 실패: ${error.message}`;
+        setResultText(`오류 로그 분석 실패: ${error.message}`);
         statusText.textContent = "오류 분석 실패";
       } finally {
         registerFixLogButton.disabled = false;
@@ -779,7 +1063,7 @@ HTML = """<!doctype html>
         promptName.value = "";
         statusText.textContent = "프롬프트 삭제됨";
       } catch (error) {
-        result.textContent = `프롬프트 삭제 실패: ${error.message}`;
+        setResultText(`프롬프트 삭제 실패: ${error.message}`);
         statusText.textContent = "삭제 실패";
       } finally {
         deletePromptButton.disabled = false;
@@ -789,16 +1073,16 @@ HTML = """<!doctype html>
     testButton.addEventListener("click", async () => {
       testButton.disabled = true;
       statusText.textContent = "연결 테스트 중...";
-      result.textContent = `${modelSelect.value} 모델 연결을 확인하는 중입니다.`;
+      setResultText(`${modelSelect.value} 모델 연결을 확인하는 중입니다.`);
 
       try {
         const data = await postJson("/api/test-model", {
           model: modelSelect.value,
         });
-        result.textContent = data.result;
+        setResultText(data.result);
         statusText.textContent = "연결 정상";
       } catch (error) {
-        result.textContent = `연결 테스트 실패: ${error.message}`;
+        setResultText(`연결 테스트 실패: ${error.message}`);
         statusText.textContent = "연결 실패";
       } finally {
         testButton.disabled = false;
@@ -806,7 +1090,7 @@ HTML = """<!doctype html>
     });
 
     downloadButton.addEventListener("click", () => {
-      const text = result.textContent.trim();
+      const text = rawResultText.trim();
       if (!text || text === "결과가 여기에 표시됩니다.") {
         statusText.textContent = "저장할 결과 없음";
         return;
@@ -826,10 +1110,10 @@ HTML = """<!doctype html>
     });
 
     loadModels().catch((error) => {
-      result.textContent = `모델 목록 로드 실패: ${error.message}`;
+      setResultText(`모델 목록 로드 실패: ${error.message}`);
     });
     loadPrompts().catch((error) => {
-      result.textContent = `프롬프트 목록 로드 실패: ${error.message}`;
+      setResultText(`프롬프트 목록 로드 실패: ${error.message}`);
     });
   </script>
 </body>
