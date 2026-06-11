@@ -17,6 +17,7 @@ deepagent/
 ├─ app_closed.py
 ├─ web_closed.py
 ├─ console_ui.py
+├─ chat_cli.py
 ├─ skills/
 │  ├─ security-report/
 │  ├─ access-audit/
@@ -43,7 +44,7 @@ deepagent/
 5. Python 가상환경 생성
 6. offline_packages만 사용해서 오프라인 설치
 7. .env 작성
-8. app_closed.py, web_closed.py 또는 console_ui.py 실행
+8. app_closed.py, web_closed.py, console_ui.py 또는 chat_cli.py 실행
 ```
 
 ## 1. 외부 인터넷 PC에서 준비
@@ -325,6 +326,35 @@ python console_ui.py
 - 실행 결과를 vLLM 위키 Markdown으로 자동 기록
 
 Windows 기본 콘솔에서도 동작하도록 추가 UI 패키지를 사용하지 않습니다.
+
+## 9. 챗봇형 CLI로 실행
+
+Claude 스타일의 대화형 CLI가 필요하면 아래 명령을 실행합니다.
+
+```powershell
+python chat_cli.py
+```
+
+대화형 CLI 명령:
+
+```text
+/help                 명령 보기
+/status               현재 모델과 런타임 상태 보기
+/model                등록 모델 목록 보기
+/model <name>         모델 변경
+/multi on|off         멀티에이전트 켜기/끄기
+/skills on|off        하네스 스킬 켜기/끄기
+/prompts              저장된 프롬프트 목록
+/load <name>          저장된 프롬프트를 불러와 바로 실행
+/save <name>          마지막 사용자 프롬프트 저장
+/clear                대화 메모리 초기화
+/test                 선택 모델 연결 테스트
+/paste                여러 줄 프롬프트 입력
+/exit                 종료
+```
+
+일반 문장을 입력하면 바로 모델에 전송됩니다.
+응답은 화면에 출력되고 `wiki_logs/`에도 vLLM 위키 Markdown 기록으로 저장됩니다.
 
 ## 실패 시 먼저 확인
 
