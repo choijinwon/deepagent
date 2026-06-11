@@ -9,7 +9,8 @@ from app_closed import (
     get_harness_skill_names,
     harness_skills_enabled,
 )
-from web_closed import format_agent_result, load_prompt_store, save_prompt_store, save_wiki_record
+from web_closed import invoke_agent_text, load_prompt_store, save_prompt_store, save_wiki_record
+from ui_common import MarkdownStream, print_key_value_table, print_markdown_result, print_status_line
 
 
 DEFAULT_PROMPT = "서버 접근권한 보안 점검 TODO 만들어줘."
@@ -38,14 +39,16 @@ class ConsoleAgentCache:
 
 def print_header(state: ConsoleState) -> None:
     print("")
-    print("=" * 72)
-    print(" DeepAgents Qwen/vLLM Closed Network Console UI")
-    print("=" * 72)
-    print(f"Model           : {state.model_name}")
-    print(f"Multi Agent     : {'ON' if state.enable_multi_agent else 'OFF'}")
-    print(f"Harness Skills  : {'ON' if harness_skills_enabled() else 'OFF'}")
-    print(f"Skill List      : {', '.join(get_harness_skill_names()) or 'none'}")
-    print("-" * 72)
+    print_status_line("DeepAgents Qwen/vLLM Closed Network Console UI", "bold cyan")
+    print_key_value_table(
+        "Runtime",
+        [
+            ("Model", state.model_name),
+            ("Multi Agent", "ON" if state.enable_multi_agent else "OFF"),
+            ("Harness Skills", "ON" if harness_skills_enabled() else "OFF"),
+            ("Skill List", ", ".join(get_harness_skill_names()) or "none"),
+        ],
+    )
 
 
 def choose_model(state: ConsoleState) -> None:
@@ -88,10 +91,7 @@ def edit_prompt(state: ConsoleState) -> None:
 
 
 def show_prompt(state: ConsoleState) -> None:
-    print("")
-    print("[현재 프롬프트]")
-    print("-" * 72)
-    print(state.prompt)
+    print_markdown_result("현재 프롬프트", state.prompt, border_style="cyan")
 
 
 def load_prompt(state: ConsoleState) -> None:
@@ -162,18 +162,41 @@ def delete_prompt() -> None:
 
 def invoke_agent(cache: ConsoleAgentCache, state: ConsoleState, prompt: str) -> str:
     agent = cache.get(state)
-    response = agent.invoke(
-        {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt,
-                }
-            ],
-            "files": get_harness_skill_files(),
-        }
-    )
-    return format_agent_result(response)
+    request = {
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt,
+            }
+        ],
+        "files": get_harness_skill_files(),
+    }
+    result, streamed = invoke_agent_text(agent, request)
+    return result
+
+
+def invoke_agent_interactive(cache: ConsoleAgentCache, state: ConsoleState, prompt: str) -> str:
+    agent = cache.get(state)
+    request = {
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt,
+            }
+        ],
+        "files": get_harness_skill_files(),
+    }
+    stream_view = MarkdownStream("실행 결과")
+    with stream_view:
+        result, streamed = invoke_agent_text(
+            agent,
+            request,
+            on_delta=stream_view.append,
+            on_status=lambda message: print_status_line(f"[status] {message}"),
+        )
+    if not streamed:
+        print_markdown_result("실행 결과", result)
+    return result
 
 
 def run_prompt(cache: ConsoleAgentCache, state: ConsoleState) -> None:
@@ -181,22 +204,16 @@ def run_prompt(cache: ConsoleAgentCache, state: ConsoleState) -> None:
         print("프롬프트가 비어 있습니다.")
         return
 
-    print("")
-    print("실행 중입니다. Qwen/vLLM 응답을 기다립니다...")
+    print_status_line("실행 중입니다. Qwen/vLLM 응답을 기다립니다...")
     try:
-        result = invoke_agent(cache, state, state.prompt)
+        result = invoke_agent_interactive(cache, state, state.prompt)
         wiki_path = save_wiki_record(
             prompt=state.prompt,
             result=result,
             model_name=state.model_name,
             enable_multi_agent=state.enable_multi_agent,
         )
-        print("")
-        print("[실행 결과]")
-        print("-" * 72)
-        print(result)
-        print("-" * 72)
-        print(f"위키 기록 저장: {wiki_path}")
+        print_status_line(f"위키 기록 저장: {wiki_path}", "green")
     except Exception as exc:
         print(f"실행 실패: {exc}")
 
@@ -208,8 +225,7 @@ def test_model(cache: ConsoleAgentCache, state: ConsoleState) -> None:
     state.enable_multi_agent = False
     try:
         result = invoke_agent(cache, state, "연결 테스트입니다. 'OK'와 현재 사용 모델명을 짧게 답하세요.")
-        print("[연결 테스트 결과]")
-        print(result)
+        print_markdown_result("연결 테스트 결과", result, border_style="cyan")
     except Exception as exc:
         print(f"연결 테스트 실패: {exc}")
     finally:

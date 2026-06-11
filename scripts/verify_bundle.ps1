@@ -27,6 +27,7 @@ $RequiredProjectFiles = @(
     "scaffold_common.py",
     "registration_common.py",
     "autofix_common.py",
+    "ui_common.py",
     "requirements.txt",
     ".env.example",
     "scripts/install_offline.ps1",

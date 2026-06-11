@@ -1,5 +1,4 @@
 import os
-import textwrap
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -48,6 +47,7 @@ from web_closed import (
     save_prompt_store,
     save_wiki_record,
 )
+from ui_common import MarkdownStream, print_key_value_table, print_markdown_result, print_status_line
 
 
 HELP_TEXT = """
@@ -144,25 +144,26 @@ class ChatAgentCache:
 
 def print_banner(state: ChatState) -> None:
     print("")
-    print("=" * 78)
-    print(" DeepAgents Chat CLI - Qwen/vLLM Closed Network")
-    print("=" * 78)
-    print("Type /help for commands. Type /exit to quit.")
+    print_status_line("DeepAgents Chat CLI - Qwen/vLLM Closed Network", "bold cyan")
+    print_status_line("Type /help for commands. Type /exit to quit.", "dim")
     print_status(state)
 
 
 def print_status(state: ChatState) -> None:
-    print("-" * 78)
-    print(f"Model          : {state.model_name}")
-    print(f"Multi Agent    : {'ON' if state.enable_multi_agent else 'OFF'}")
-    print(f"Harness Skills : {'ON' if harness_skills_enabled() else 'OFF'}")
-    print(f"Skill List     : {', '.join(get_harness_skill_names()) or 'none'}")
-    print(f"Workspace      : {state.workspace_dir}")
-    print(f"Attached Files : {len(state.attached_files)}")
-    print(f"Goal           : {state.goal.get('title') or 'none'}")
-    print(f"Plan           : {state.plan_title or 'none'} ({len(state.plan_steps)} steps)")
-    print(f"Turns          : {len([m for m in state.messages if m['role'] == 'user'])}")
-    print("-" * 78)
+    print_key_value_table(
+        "Runtime",
+        [
+            ("Model", state.model_name),
+            ("Multi Agent", "ON" if state.enable_multi_agent else "OFF"),
+            ("Harness Skills", "ON" if harness_skills_enabled() else "OFF"),
+            ("Skill List", ", ".join(get_harness_skill_names()) or "none"),
+            ("Workspace", str(state.workspace_dir)),
+            ("Attached Files", str(len(state.attached_files))),
+            ("Goal", str(state.goal.get("title") or "none")),
+            ("Plan", f"{state.plan_title or 'none'} ({len(state.plan_steps)} steps)"),
+            ("Turns", str(len([m for m in state.messages if m["role"] == "user"]))),
+        ],
+    )
 
 
 def read_paste() -> str:
@@ -177,15 +178,7 @@ def read_paste() -> str:
 
 
 def wrap_print(text: str) -> None:
-    print("")
-    print("assistant>")
-    print("-" * 78)
-    for paragraph in str(text).splitlines():
-        if not paragraph:
-            print("")
-            continue
-        print(textwrap.fill(paragraph, width=100, replace_whitespace=False))
-    print("-" * 78)
+    print_markdown_result("assistant", text)
 
 
 def invoke_chat(
@@ -200,8 +193,8 @@ def invoke_chat(
     state.last_user_prompt = prompt
 
     if show_progress:
-        print(f"[status] model={state.model_name}, multi_agent={'on' if state.enable_multi_agent else 'off'}", flush=True)
-        print("[status] 에이전트와 컨텍스트 준비 중...", flush=True)
+        print_status_line(f"[status] model={state.model_name}, multi_agent={'on' if state.enable_multi_agent else 'off'}")
+        print_status_line("[status] 에이전트와 컨텍스트 준비 중...")
     agent = cache.get(state)
     files = get_harness_skill_files()
     files.update(state.attached_files)
@@ -216,37 +209,35 @@ def invoke_chat(
         "messages": state.messages,
         "files": files,
     }
-    printed_header = False
+    stream_view = MarkdownStream("assistant")
 
     def print_status(message: str) -> None:
         if show_progress:
-            print(f"[status] {message}", flush=True)
+            print_status_line(f"[status] {message}")
 
     def print_delta(delta: str) -> None:
-        nonlocal printed_header
         if not stream_to_console:
             return
-        if not printed_header:
-            print("")
-            print("assistant>")
-            print("-" * 78)
-            printed_header = True
-        print(delta, end="", flush=True)
+        stream_view.append(delta)
 
-    result, streamed = invoke_agent_text(
-        agent,
-        request,
-        on_delta=print_delta if stream_to_console else None,
-        on_status=print_status,
-    )
+    if stream_to_console:
+        with stream_view:
+            result, streamed = invoke_agent_text(
+                agent,
+                request,
+                on_delta=print_delta,
+                on_status=print_status,
+            )
+    else:
+        result, streamed = invoke_agent_text(
+            agent,
+            request,
+            on_delta=None,
+            on_status=print_status,
+        )
     if stream_to_console:
         if not streamed:
-            print("")
-            print("assistant>")
-            print("-" * 78)
-            print(result)
-        print("")
-        print("-" * 78)
+            print_markdown_result("assistant", result)
     state.messages.append({"role": "assistant", "content": result})
 
     save_wiki_record(

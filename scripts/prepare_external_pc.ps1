@@ -39,6 +39,7 @@ Copy-Item -Force (Join-Path $Root "ml_common.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "scaffold_common.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "registration_common.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "autofix_common.py") $BundleProjectDir
+Copy-Item -Force (Join-Path $Root "ui_common.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "requirements.txt") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root ".env.example") $BundleProjectDir
 Copy-Item -Recurse -Force (Join-Path $Root "scripts") $BundleProjectDir

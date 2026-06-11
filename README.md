@@ -24,6 +24,7 @@ deepagent/
 ├─ scaffold_common.py
 ├─ registration_common.py
 ├─ autofix_common.py
+├─ ui_common.py
 ├─ skills/
 │  ├─ security-report/
 │  ├─ access-audit/
@@ -170,6 +171,7 @@ QWEN_MODEL=qwen3.5
 QWEN_MODELS=qwen3.5,gpt20,gamma
 ENABLE_MULTI_AGENT=true
 ENABLE_HARNESS_SKILLS=true
+ENABLE_RICH_CONSOLE=true
 WEB_HOST=127.0.0.1
 WEB_PORT=8000
 STREAM_CHUNK_CHARS=1800
@@ -369,7 +371,14 @@ python console_ui.py
 - 모델 연결 테스트
 - 실행 결과를 vLLM 위키 Markdown으로 자동 기록
 
-Windows 기본 콘솔에서도 동작하도록 추가 UI 패키지를 사용하지 않습니다.
+콘솔 UI는 무료 오픈소스 `rich` 라이브러리를 사용해 Markdown, 표, 패널, 코드블록을 보기 좋게 표시합니다.
+`rich` wheel은 `requirements.txt`에 포함되어 외부 PC의 `prepare_external_pc.ps1` 실행 시 `offline_packages/`에 함께 다운로드됩니다.
+`rich`가 설치되지 않은 환경에서도 기본 `print` 출력으로 자동 fallback됩니다.
+끄고 싶으면 `.env`에서 아래처럼 설정합니다.
+
+```ini
+ENABLE_RICH_CONSOLE=false
+```
 
 ## 9. 챗봇형 CLI로 실행
 
@@ -438,7 +447,8 @@ python chat_cli.py
 ```
 
 일반 문장을 입력하면 바로 모델에 전송됩니다.
-일반 문장을 입력하면 CLI도 상태를 즉시 출력하고, 모델 스트리밍이 가능할 때는 답변 조각을 바로 화면에 표시합니다.
+CLI도 `rich`가 설치되어 있으면 답변을 Markdown 패널로 렌더링합니다.
+모델 스트리밍이 가능할 때는 라이브 패널이 갱신되고, 스트리밍 미지원 모델은 최종 응답을 Markdown으로 예쁘게 표시합니다.
 응답 원문은 `wiki_logs/`에도 vLLM 위키 Markdown 기록으로 저장됩니다.
 
 작업 폴더와 플랜 저장 위치는 `.env`에서 바꿀 수 있습니다.
@@ -663,6 +673,7 @@ cd offline_bundle\deepagent
 ```powershell
 python -c "import langchain_openai; print('ok')"
 python -c "import deepagents; print('ok')"
+python -c "import rich; print('rich ok')"
 ```
 
 Qwen 3.5 API 연결을 확인합니다.
