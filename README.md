@@ -32,6 +32,7 @@ deepagent/
 ├─ tools/
 │  └─ README.md
 ├─ requirements.txt
+├─ pyproject.toml
 ├─ .env.example
 ├─ .gitignore
 └─ scripts/
@@ -54,7 +55,7 @@ deepagent/
 5. Python 가상환경 생성
 6. offline_packages만 사용해서 오프라인 설치
 7. .env 작성
-8. app_closed.py, web_closed.py, console_ui.py 또는 chat_cli.py 실행
+8. deepagent, deepagent-web, deepagent-console 같은 터미널 명령으로 실행
 ```
 
 ## 1. 외부 인터넷 PC에서 준비
@@ -145,6 +146,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 ```powershell
 pip install --no-index --find-links=..\offline_packages -r requirements.txt
+pip install --no-index --find-links=..\offline_packages --no-build-isolation --no-deps -e .
 ```
 
 설치를 확인합니다.
@@ -152,6 +154,20 @@ pip install --no-index --find-links=..\offline_packages -r requirements.txt
 ```powershell
 python -c "import deepagents; print('deepagents import OK')"
 python -c "import langchain_openai; print('langchain_openai import OK')"
+deepagent-doctor
+```
+
+`install_offline.ps1`은 의존성 설치 뒤 현재 프로젝트를 editable 모드로 등록합니다.
+가상환경이 활성화되어 있으면 아래 명령을 터미널에서 바로 사용할 수 있습니다.
+
+```powershell
+deepagent          # 챗봇형 CLI
+deepagents         # 챗봇형 CLI 별칭
+deepagent-chat     # 챗봇형 CLI 별칭
+deepagent-console  # 메뉴형 콘솔 UI
+deepagent-web      # 웹 UI 실행
+deepagent-doctor   # 폐쇄망 환경 진단
+deepagent-run      # 기본 단발 실행 테스트
 ```
 
 ## 5. .env 생성
@@ -250,7 +266,7 @@ ENABLE_HARNESS_SKILLS=false
 콘솔에서 바로 테스트하려면 아래 명령을 실행합니다.
 
 ```powershell
-python app_closed.py
+deepagent-run
 ```
 
 `app_closed.py`는 외부 검색 Tool을 연결하지 않고, 사내 보안 점검 TODO를 만드는 내부 Tool만 등록합니다.
@@ -279,7 +295,7 @@ agent.invoke({
 추가 패키지 설치 없이 Python 표준 라이브러리 HTTP 서버로 실행됩니다.
 
 ```powershell
-python web_closed.py
+deepagent-web
 ```
 
 브라우저에서 아래 주소를 엽니다.
@@ -358,7 +374,7 @@ WIKI_LOG_STYLE=vllm
 브라우저 없이 PowerShell 콘솔에서 메뉴 기반으로 사용하려면 아래 명령을 실행합니다.
 
 ```powershell
-python console_ui.py
+deepagent-console
 ```
 
 콘솔 UI에서 가능한 작업:
@@ -385,7 +401,7 @@ ENABLE_RICH_CONSOLE=false
 Claude 스타일의 대화형 CLI가 필요하면 아래 명령을 실행합니다.
 
 ```powershell
-python chat_cli.py
+deepagent
 ```
 
 대화형 CLI 명령:
@@ -490,7 +506,7 @@ ML_PLATFORM_PYTHON_VERSION=3.11
 폐쇄망 DeepAgents PoC 실행 환경 구성
 
 ## Success Criteria
-- Windows 11에서 python chat_cli.py 실행
+- Windows 11에서 deepagent 실행
 - qwen3.5 모델 연결 테스트 성공
 - 실행 기록이 wiki_logs에 남는다
 
@@ -500,8 +516,8 @@ ML_PLATFORM_PYTHON_VERSION=3.11
 
 # Plan
 - .env 구성
-- python doctor.py 실행
-- python chat_cli.py 실행
+- deepagent-doctor 실행
+- deepagent 실행
 - 결과를 wiki_logs에 기록
 
 # Folders
@@ -631,7 +647,7 @@ fix_reports/
 Windows 11 폐쇄망 PC에서 설정 문제를 먼저 확인하려면 아래 명령을 실행합니다.
 
 ```powershell
-python doctor.py
+deepagent-doctor
 ```
 
 챗봇형 CLI 안에서는 아래 명령으로 같은 진단을 실행할 수 있습니다.

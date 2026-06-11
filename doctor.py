@@ -17,6 +17,7 @@ REQUIRED_IMPORTS = [
     "dotenv",
     "httpx",
     "requests",
+    "rich",
 ]
 
 

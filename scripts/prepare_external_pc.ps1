@@ -41,6 +41,7 @@ Copy-Item -Force (Join-Path $Root "registration_common.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "autofix_common.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "ui_common.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "requirements.txt") $BundleProjectDir
+Copy-Item -Force (Join-Path $Root "pyproject.toml") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root ".env.example") $BundleProjectDir
 Copy-Item -Recurse -Force (Join-Path $Root "scripts") $BundleProjectDir
 Copy-Item -Recurse -Force (Join-Path $Root "skills") $BundleProjectDir

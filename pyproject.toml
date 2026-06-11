@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "deepagent-closed"
+version = "0.1.0"
+description = "Closed-network DeepAgents launcher for Qwen/vLLM and ML Platform assistant workflows."
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+deepagent = "chat_cli:main"
+deepagents = "chat_cli:main"
+deepagent-chat = "chat_cli:main"
+deepagent-console = "console_ui:main"
+deepagent-web = "web_closed:main"
+deepagent-doctor = "doctor:main"
+deepagent-run = "app_closed:main"
+
+[tool.setuptools]
+py-modules = [
+  "app_closed",
+  "autofix_common",
+  "chat_cli",
+  "console_ui",
+  "doctor",
+  "ml_common",
+  "ops_common",
+  "registration_common",
+  "scaffold_common",
+  "ui_common",
+  "web_closed",
+]

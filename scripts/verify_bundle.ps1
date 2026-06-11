@@ -29,6 +29,7 @@ $RequiredProjectFiles = @(
     "autofix_common.py",
     "ui_common.py",
     "requirements.txt",
+    "pyproject.toml",
     ".env.example",
     "scripts/install_offline.ps1",
     "scripts/verify_bundle.ps1",
