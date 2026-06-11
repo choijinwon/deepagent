@@ -1,6 +1,8 @@
 import os
 import textwrap
 from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 
 from app_closed import (
     build_agent,
@@ -26,6 +28,22 @@ Commands
   /save <name>          Save the last user prompt
   /clear                Clear chat memory
   /test                 Test selected model connection
+  /folder               Show current workspace folder
+  /folder <path>        Set workspace folder
+  /tree [depth]         Show workspace file tree
+  /read <path>          Print a workspace file
+  /write <path>         Write a workspace file from pasted lines
+  /add-file <path>      Attach a workspace file to agent context
+  /files                List attached files
+  /drop-file <path|all> Remove attached file context
+  /plan new <title>     Start a plan
+  /plan add <step>      Add a plan step
+  /plan done <number>   Mark a plan step done
+  /plan show            Show current plan
+  /plan save [name]     Save current plan as Markdown
+  /plan load <name>     Load a saved plan
+  /plan clear           Clear current plan
+  /plans                List saved plans
   /exit                 Quit
 
 Input
@@ -38,8 +56,13 @@ Input
 class ChatState:
     model_name: str
     enable_multi_agent: bool
+    workspace_dir: Path
+    plan_dir: Path
     messages: list[dict[str, str]] = field(default_factory=list)
     last_user_prompt: str = ""
+    attached_files: dict[str, str] = field(default_factory=dict)
+    plan_title: str = ""
+    plan_steps: list[dict[str, str]] = field(default_factory=list)
 
 
 class ChatAgentCache:
@@ -71,6 +94,9 @@ def print_status(state: ChatState) -> None:
     print(f"Multi Agent    : {'ON' if state.enable_multi_agent else 'OFF'}")
     print(f"Harness Skills : {'ON' if harness_skills_enabled() else 'OFF'}")
     print(f"Skill List     : {', '.join(get_harness_skill_names()) or 'none'}")
+    print(f"Workspace      : {state.workspace_dir}")
+    print(f"Attached Files : {len(state.attached_files)}")
+    print(f"Plan           : {state.plan_title or 'none'} ({len(state.plan_steps)} steps)")
     print(f"Turns          : {len([m for m in state.messages if m['role'] == 'user'])}")
     print("-" * 78)
 
@@ -103,10 +129,12 @@ def invoke_chat(cache: ChatAgentCache, state: ChatState, prompt: str) -> str:
     state.last_user_prompt = prompt
 
     agent = cache.get(state)
+    files = get_harness_skill_files()
+    files.update(state.attached_files)
     response = agent.invoke(
         {
             "messages": state.messages,
-            "files": get_harness_skill_files(),
+            "files": files,
         }
     )
     result = format_agent_result(response)
@@ -119,6 +147,241 @@ def invoke_chat(cache: ChatAgentCache, state: ChatState, prompt: str) -> str:
         enable_multi_agent=state.enable_multi_agent,
     )
     return result
+
+
+def resolve_workspace_path(state: ChatState, value: str) -> Path:
+    if not value:
+        raise ValueError("path is required")
+    path = Path(value)
+    if not path.is_absolute():
+        path = state.workspace_dir / path
+    return path.resolve()
+
+
+def as_virtual_path(state: ChatState, path: Path) -> str:
+    try:
+        relative = path.relative_to(state.workspace_dir.resolve())
+        return f"/workspace/{relative.as_posix()}"
+    except ValueError:
+        return f"/workspace_external/{path.name}"
+
+
+def set_workspace(state: ChatState, args: str) -> None:
+    if not args:
+        print(f"Workspace: {state.workspace_dir}")
+        return
+    path = Path(args).expanduser()
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    path.mkdir(parents=True, exist_ok=True)
+    state.workspace_dir = path.resolve()
+    print(f"Workspace set: {state.workspace_dir}")
+
+
+def show_tree(state: ChatState, args: str) -> None:
+    depth = 2
+    if args:
+        if not args.isdigit():
+            print("Usage: /tree [depth]")
+            return
+        depth = max(1, min(int(args), 5))
+
+    root = state.workspace_dir
+    root.mkdir(parents=True, exist_ok=True)
+    print(f"{root.name}/")
+
+    def walk(path: Path, current_depth: int, prefix: str = "") -> None:
+        if current_depth > depth:
+            return
+        entries = sorted(path.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower()))
+        for index, entry in enumerate(entries):
+            connector = "└─ " if index == len(entries) - 1 else "├─ "
+            print(f"{prefix}{connector}{entry.name}{'/' if entry.is_dir() else ''}")
+            if entry.is_dir():
+                extension = "   " if index == len(entries) - 1 else "│  "
+                walk(entry, current_depth + 1, prefix + extension)
+
+    walk(root, 1)
+
+
+def read_workspace_file(state: ChatState, args: str) -> None:
+    try:
+        path = resolve_workspace_path(state, args)
+    except ValueError as exc:
+        print(exc)
+        return
+    if not path.exists() or not path.is_file():
+        print(f"File not found: {path}")
+        return
+    content = path.read_text(encoding="utf-8")
+    print("")
+    print(f"[{path}]")
+    print("-" * 78)
+    print(content)
+
+
+def write_workspace_file(state: ChatState, args: str) -> None:
+    try:
+        path = resolve_workspace_path(state, args)
+    except ValueError as exc:
+        print(exc)
+        return
+    print("Enter file content. Finish with a single dot (.) on its own line.")
+    content = read_paste()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    print(f"File written: {path}")
+
+
+def attach_file(state: ChatState, args: str) -> None:
+    try:
+        path = resolve_workspace_path(state, args)
+    except ValueError as exc:
+        print(exc)
+        return
+    if not path.exists() or not path.is_file():
+        print(f"File not found: {path}")
+        return
+    content = path.read_text(encoding="utf-8")
+    virtual_path = as_virtual_path(state, path)
+    state.attached_files[virtual_path] = content
+    print(f"Attached: {virtual_path}")
+
+
+def list_attached_files(state: ChatState) -> None:
+    if not state.attached_files:
+        print("No attached files.")
+        return
+    for path in state.attached_files:
+        print(f"- {path}")
+
+
+def drop_file(state: ChatState, args: str) -> None:
+    if args == "all":
+        state.attached_files.clear()
+        print("All attached files removed.")
+        return
+    if not args:
+        print("Usage: /drop-file <path|all>")
+        return
+    if args in state.attached_files:
+        del state.attached_files[args]
+        print(f"Removed: {args}")
+        return
+    print(f"Attached file not found: {args}")
+
+
+def render_plan_markdown(state: ChatState) -> str:
+    title = state.plan_title or "Untitled Plan"
+    lines = [
+        f"# {title}",
+        "",
+        f"- Created: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        f"- Model: {state.model_name}",
+        f"- Multi Agent: {'enabled' if state.enable_multi_agent else 'disabled'}",
+        f"- Harness Skills: {'enabled' if harness_skills_enabled() else 'disabled'}",
+        "",
+        "## Steps",
+        "",
+    ]
+    if not state.plan_steps:
+        lines.append("- [ ] No steps yet")
+    else:
+        for step in state.plan_steps:
+            checked = "x" if step["status"] == "done" else " "
+            lines.append(f"- [{checked}] {step['text']}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def handle_plan_command(state: ChatState, args: str) -> None:
+    command, _, value = args.partition(" ")
+    command = command.lower().strip()
+    value = value.strip()
+
+    if command == "new":
+        if not value:
+            print("Usage: /plan new <title>")
+            return
+        state.plan_title = value
+        state.plan_steps = []
+        print(f"Plan started: {state.plan_title}")
+    elif command == "add":
+        if not value:
+            print("Usage: /plan add <step>")
+            return
+        state.plan_steps.append({"status": "todo", "text": value})
+        print(f"Plan step added: {value}")
+    elif command == "done":
+        if not value.isdigit():
+            print("Usage: /plan done <number>")
+            return
+        index = int(value) - 1
+        if index < 0 or index >= len(state.plan_steps):
+            print("Step number out of range.")
+            return
+        state.plan_steps[index]["status"] = "done"
+        print(f"Plan step done: {index + 1}")
+    elif command == "show":
+        print(render_plan_markdown(state))
+    elif command == "save":
+        save_plan(state, value)
+    elif command == "load":
+        load_plan(state, value)
+    elif command == "clear":
+        state.plan_title = ""
+        state.plan_steps = []
+        print("Plan cleared.")
+    else:
+        print("Usage: /plan new|add|done|show|save|load|clear")
+
+
+def plan_slug(value: str) -> str:
+    safe = "".join(ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in value.strip())
+    safe = "-".join(part for part in safe.split("-") if part)
+    return safe[:80] or "plan"
+
+
+def save_plan(state: ChatState, name: str = "") -> None:
+    if not state.plan_title and not state.plan_steps:
+        print("No current plan.")
+        return
+    state.plan_dir.mkdir(parents=True, exist_ok=True)
+    filename = f"{plan_slug(name or state.plan_title)}.md"
+    path = state.plan_dir / filename
+    path.write_text(render_plan_markdown(state), encoding="utf-8")
+    print(f"Plan saved: {path}")
+
+
+def list_plans(state: ChatState) -> None:
+    state.plan_dir.mkdir(parents=True, exist_ok=True)
+    plans = sorted(state.plan_dir.glob("*.md"))
+    if not plans:
+        print("No saved plans.")
+        return
+    for path in plans:
+        print(f"- {path.stem}")
+
+
+def load_plan(state: ChatState, name: str) -> None:
+    if not name:
+        print("Usage: /plan load <name>")
+        return
+    path = state.plan_dir / f"{plan_slug(name)}.md"
+    if not path.exists():
+        print(f"Plan not found: {path}")
+        return
+    content = path.read_text(encoding="utf-8")
+    state.plan_title = name
+    state.plan_steps = []
+    for line in content.splitlines():
+        if line.startswith("# "):
+            state.plan_title = line[2:].strip()
+        elif line.startswith("- ["):
+            status = "done" if line.startswith("- [x]") else "todo"
+            text = line[6:].strip()
+            state.plan_steps.append({"status": status, "text": text})
+    print(f"Plan loaded: {state.plan_title}")
 
 
 def handle_model_command(state: ChatState, args: str) -> None:
@@ -238,6 +501,24 @@ def handle_command(command: str, cache: ChatAgentCache, state: ChatState) -> boo
         print("Chat memory cleared.")
     elif name == "/test":
         test_model(cache, state)
+    elif name == "/folder":
+        set_workspace(state, args)
+    elif name == "/tree":
+        show_tree(state, args)
+    elif name == "/read":
+        read_workspace_file(state, args)
+    elif name == "/write":
+        write_workspace_file(state, args)
+    elif name == "/add-file":
+        attach_file(state, args)
+    elif name == "/files":
+        list_attached_files(state)
+    elif name == "/drop-file":
+        drop_file(state, args)
+    elif name == "/plan":
+        handle_plan_command(state, args)
+    elif name == "/plans":
+        list_plans(state)
     elif name == "/paste":
         prompt = read_paste()
         if prompt:
@@ -254,6 +535,8 @@ def main() -> None:
     state = ChatState(
         model_name=get_default_model(),
         enable_multi_agent=os.getenv("ENABLE_MULTI_AGENT", "true").lower() in ("1", "true", "yes", "y"),
+        workspace_dir=Path(os.getenv("CHAT_WORKSPACE_DIR", "agent_workspace")).resolve(),
+        plan_dir=Path(os.getenv("PLAN_DIR", "plans")).resolve(),
     )
     cache = ChatAgentCache()
     print_banner(state)

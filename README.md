@@ -166,6 +166,8 @@ WEB_PORT=8000
 PROMPT_STORE_PATH=prompt_templates.json
 WIKI_LOG_DIR=wiki_logs
 WIKI_LOG_STYLE=vllm
+CHAT_WORKSPACE_DIR=agent_workspace
+PLAN_DIR=plans
 ```
 
 `QWEN_BASE_URL`에 `/v1`이 붙는지 반드시 확인하세요.
@@ -350,11 +352,37 @@ python chat_cli.py
 /clear                대화 메모리 초기화
 /test                 선택 모델 연결 테스트
 /paste                여러 줄 프롬프트 입력
+/folder               현재 작업 폴더 보기
+/folder <path>        작업 폴더 설정
+/tree [depth]         작업 폴더 트리 보기
+/read <path>          작업 폴더 파일 출력
+/write <path>         작업 폴더 파일 작성
+/add-file <path>      파일을 에이전트 컨텍스트에 첨부
+/files                첨부 파일 목록 보기
+/drop-file <path|all> 첨부 파일 제거
+/plan new <title>     플랜 시작
+/plan add <step>      플랜 단계 추가
+/plan done <number>   플랜 단계 완료 처리
+/plan show            현재 플랜 보기
+/plan save [name]     플랜 Markdown 저장
+/plan load <name>     저장된 플랜 불러오기
+/plan clear           현재 플랜 초기화
+/plans                저장된 플랜 목록
 /exit                 종료
 ```
 
 일반 문장을 입력하면 바로 모델에 전송됩니다.
 응답은 화면에 출력되고 `wiki_logs/`에도 vLLM 위키 Markdown 기록으로 저장됩니다.
+
+작업 폴더와 플랜 저장 위치는 `.env`에서 바꿀 수 있습니다.
+
+```ini
+CHAT_WORKSPACE_DIR=agent_workspace
+PLAN_DIR=plans
+```
+
+`/add-file`로 첨부한 파일은 DeepAgents 가상 파일 컨텍스트에 함께 전달됩니다.
+`/plan save`로 저장한 플랜은 Markdown 파일로 남습니다.
 
 ## 실패 시 먼저 확인
 
@@ -386,4 +414,5 @@ curl http://xxx.xxx.xxx.xxx:포트/v1/models
 `.env` 파일은 민감 정보가 포함되므로 Git에 올리지 않습니다.
 `prompt_templates.json`은 사용자별 프롬프트 저장 파일이므로 Git에 올리지 않습니다.
 `wiki_logs/`는 실행 기록 폴더이므로 Git에 올리지 않습니다.
+`agent_workspace/`와 `plans/`는 사용자별 작업 파일과 플랜 저장 폴더이므로 Git에 올리지 않습니다.
 `offline_packages/`는 용량이 크고 환경별 wheel이 섞일 수 있으므로 Git에 올리지 않습니다.
