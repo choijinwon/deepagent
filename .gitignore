@@ -19,3 +19,5 @@ prompt_templates.json
 wiki_logs/
 agent_workspace/
 plans/
+goals/
+sessions/

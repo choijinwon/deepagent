@@ -18,17 +18,22 @@ deepagent/
 ├─ web_closed.py
 ├─ console_ui.py
 ├─ chat_cli.py
+├─ doctor.py
+├─ ops_common.py
 ├─ skills/
 │  ├─ security-report/
 │  ├─ access-audit/
 │  └─ vllm-ops-wiki/
+├─ tools/
+│  └─ README.md
 ├─ requirements.txt
 ├─ .env.example
 ├─ .gitignore
 └─ scripts/
    ├─ prepare_external_pc.ps1
    ├─ build_offline_packages.ps1
-   └─ install_offline.ps1
+   ├─ install_offline.ps1
+   └─ verify_bundle.ps1
 ```
 
 ## 전체 흐름
@@ -168,6 +173,9 @@ WIKI_LOG_DIR=wiki_logs
 WIKI_LOG_STYLE=vllm
 CHAT_WORKSPACE_DIR=agent_workspace
 PLAN_DIR=plans
+GOAL_DIR=goals
+SESSION_DIR=sessions
+MASK_SENSITIVE_LOGS=true
 ```
 
 `QWEN_BASE_URL`에 `/v1`이 붙는지 반드시 확인하세요.
@@ -282,6 +290,7 @@ ENABLE_MULTI_AGENT=false
 
 자주 쓰는 프롬프트는 웹 화면에서 이름을 입력한 뒤 `프롬프트 저장` 버튼으로 저장할 수 있습니다.
 저장된 프롬프트는 `저장된 프롬프트` 목록에서 다시 불러오거나 삭제할 수 있습니다.
+프롬프트 분류와 태그도 함께 저장할 수 있어 보안점검, 보고서, vLLM 운영, 장애분석 등으로 구분할 수 있습니다.
 기본 저장 파일은 `prompt_templates.json`이며, 위치를 바꾸려면 `.env`에서 아래 값을 수정합니다.
 
 ```ini
@@ -290,6 +299,8 @@ PROMPT_STORE_PATH=prompt_templates.json
 
 웹에서 `실행` 버튼으로 생성한 결과는 vLLM 위키트리 형식의 Markdown 기록으로 자동 저장됩니다.
 기본 저장 폴더는 `wiki_logs/`입니다.
+웹 화면의 목표, 플랜, 첨부 파일 경로는 실행 시 에이전트 가상 파일 컨텍스트에 함께 전달됩니다.
+`목표 저장`, `플랜 저장` 버튼으로 CLI와 같은 `goals/`, `plans/` 폴더에 Markdown 기록을 남길 수 있습니다.
 
 ```text
 wiki_logs/
@@ -299,9 +310,10 @@ wiki_logs/
    └─ 102010-보안-점검-보고서-초안.md
 ```
 
-`wiki_logs/index.md`에는 vLLM 환경 정보, 등록 모델, 날짜별 실행 기록 트리와 각 Markdown 문서 링크가 자동으로 갱신됩니다.
-각 실행 기록에는 모델명, OpenAI 호환 Base URL, Tool Calling 필요 여부, 멀티에이전트 사용 여부, 하네스 스킬 목록, 프롬프트, 결과가 저장됩니다.
+`wiki_logs/index.md`에는 vLLM 환경 정보, 등록 모델, 날짜별 실행 기록 트리, 모델별 링크, 목표별 링크가 자동으로 갱신됩니다.
+각 실행 기록에는 모델명, OpenAI 호환 Base URL, 목표, Tool Calling 필요 여부, 멀티에이전트 사용 여부, 하네스 스킬 목록, 프롬프트, 결과가 저장됩니다.
 API Key는 기록하지 않습니다.
+`MASK_SENSITIVE_LOGS=true`이면 실행 기록 저장 전에 API Key/Bearer 토큰 패턴과 IPv4 주소를 마스킹합니다.
 저장 위치를 바꾸려면 `.env`에서 아래 값을 수정합니다.
 
 ```ini
@@ -368,6 +380,19 @@ python chat_cli.py
 /plan load <name>     저장된 플랜 불러오기
 /plan clear           현재 플랜 초기화
 /plans                저장된 플랜 목록
+/goal new <title>     목표 시작
+/goal criteria <text> 성공 기준 추가
+/goal constraint <t>  제약사항 추가
+/goal note <text>     목표 메모 추가
+/goal show            현재 목표 보기
+/goal save [name]     목표 Markdown 저장
+/goal load <name>     저장된 목표 불러오기
+/goal clear           현재 목표 초기화
+/goals                저장된 목표 목록
+/session save <name>  현재 세션 저장
+/session load <name>  저장된 세션 복구
+/sessions             저장된 세션 목록
+/doctor               폐쇄망 진단 실행
 /exit                 종료
 ```
 
@@ -379,10 +404,54 @@ python chat_cli.py
 ```ini
 CHAT_WORKSPACE_DIR=agent_workspace
 PLAN_DIR=plans
+GOAL_DIR=goals
+SESSION_DIR=sessions
 ```
 
 `/add-file`로 첨부한 파일은 DeepAgents 가상 파일 컨텍스트에 함께 전달됩니다.
 `/plan save`로 저장한 플랜은 Markdown 파일로 남습니다.
+`/goal save`로 저장한 목표도 Markdown 파일로 남고, 현재 목표는 다음 에이전트 호출에 `/goals/current-goal.md`로 자동 전달됩니다.
+`/session save`는 모델, 멀티에이전트 설정, 목표, 플랜, 첨부 파일 내용, 최근 대화를 JSON과 Markdown으로 저장합니다.
+
+## 10. 폐쇄망 진단
+
+Windows 11 폐쇄망 PC에서 설정 문제를 먼저 확인하려면 아래 명령을 실행합니다.
+
+```powershell
+python doctor.py
+```
+
+챗봇형 CLI 안에서는 아래 명령으로 같은 진단을 실행할 수 있습니다.
+
+```text
+/doctor
+```
+
+진단 항목:
+
+- 필수 패키지 import 확인
+- `.env` 존재 여부 확인
+- `QWEN_API_KEY`, `QWEN_BASE_URL`, `QWEN_MODEL`, `QWEN_MODELS` 확인
+- `QWEN_BASE_URL`의 `/v1/models` 호출 확인
+- Tool Calling 설정 확인 안내
+
+## 11. 오프라인 번들 검증
+
+외부 PC에서 `prepare_external_pc.ps1`을 실행하면 `offline_bundle/bundle_manifest.json`이 함께 생성됩니다.
+폐쇄망 PC로 복사한 뒤 아래 명령으로 필수 파일 누락 여부를 확인합니다.
+
+```powershell
+cd offline_bundle\deepagent
+.\scripts\verify_bundle.ps1
+```
+
+검증 항목:
+
+- 실행용 Python 파일
+- 스킬 파일
+- 설치 스크립트
+- `offline_packages` 폴더와 wheel 파일
+- `bundle_manifest.json`
 
 ## 실패 시 먼저 확인
 
@@ -414,5 +483,5 @@ curl http://xxx.xxx.xxx.xxx:포트/v1/models
 `.env` 파일은 민감 정보가 포함되므로 Git에 올리지 않습니다.
 `prompt_templates.json`은 사용자별 프롬프트 저장 파일이므로 Git에 올리지 않습니다.
 `wiki_logs/`는 실행 기록 폴더이므로 Git에 올리지 않습니다.
-`agent_workspace/`와 `plans/`는 사용자별 작업 파일과 플랜 저장 폴더이므로 Git에 올리지 않습니다.
+`agent_workspace/`, `plans/`, `goals/`, `sessions/`는 사용자별 작업 파일, 플랜, 목표, 세션 저장 폴더이므로 Git에 올리지 않습니다.
 `offline_packages/`는 용량이 크고 환경별 wheel이 섞일 수 있으므로 Git에 올리지 않습니다.

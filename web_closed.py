@@ -6,6 +6,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from ops_common import goal_to_markdown, save_goal_markdown, slugify as common_slugify
 from app_closed import (
     build_agent,
     get_available_models,
@@ -26,6 +27,9 @@ MODEL_OPTIONS = get_available_models()
 PROMPT_STORE_PATH = Path(os.getenv("PROMPT_STORE_PATH", "prompt_templates.json"))
 WIKI_LOG_DIR = Path(os.getenv("WIKI_LOG_DIR", "wiki_logs"))
 WIKI_LOG_STYLE = os.getenv("WIKI_LOG_STYLE", "vllm")
+PLAN_DIR = Path(os.getenv("PLAN_DIR", "plans"))
+WORKSPACE_DIR = Path(os.getenv("CHAT_WORKSPACE_DIR", "agent_workspace"))
+MASK_SENSITIVE_LOGS = os.getenv("MASK_SENSITIVE_LOGS", "true").lower() in ("1", "true", "yes", "y")
 
 HTML = """<!doctype html>
 <html lang="ko">
@@ -47,7 +51,7 @@ HTML = """<!doctype html>
       place-items: center;
     }
     main {
-      width: min(960px, calc(100vw - 32px));
+      width: min(1180px, calc(100vw - 32px));
       background: #ffffff;
       border: 1px solid #dce3ef;
       border-radius: 8px;
@@ -120,6 +124,22 @@ HTML = """<!doctype html>
       gap: 14px;
       margin-bottom: 14px;
     }
+    .ops-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin: 14px 0;
+    }
+    .ops-panel {
+      border: 1px solid #dce3ef;
+      border-radius: 6px;
+      padding: 14px;
+      background: #f8fafc;
+    }
+    .ops-panel textarea {
+      min-height: 86px;
+      background: #ffffff;
+    }
     .toggle {
       display: flex;
       align-items: center;
@@ -178,7 +198,8 @@ HTML = """<!doctype html>
     }
     @media (max-width: 680px) {
       .controls,
-      .prompt-library {
+      .prompt-library,
+      .ops-grid {
         grid-template-columns: 1fr;
       }
     }
@@ -211,12 +232,42 @@ HTML = """<!doctype html>
           <input id="promptName" type="text" placeholder="예: 접근권한 점검 보고서">
         </div>
       </div>
+      <div class="prompt-library">
+        <div>
+          <label for="promptCategory">프롬프트 분류</label>
+          <input id="promptCategory" type="text" placeholder="예: 보안점검">
+        </div>
+        <div>
+          <label for="promptTags">태그</label>
+          <input id="promptTags" type="text" placeholder="예: 접근권한, vllm, 보고서">
+        </div>
+      </div>
       <label for="prompt">요청 내용</label>
       <textarea id="prompt">서버 접근권한 보안 점검 TODO 만들어줘.</textarea>
+      <div class="ops-grid">
+        <div class="ops-panel">
+          <label for="goalTitle">목표</label>
+          <input id="goalTitle" type="text" placeholder="예: 폐쇄망 DeepAgents PoC 검증">
+          <label for="goalCriteria">성공 기준</label>
+          <textarea id="goalCriteria" placeholder="한 줄에 하나씩 입력"></textarea>
+          <label for="goalConstraints">제약사항</label>
+          <textarea id="goalConstraints" placeholder="예: 외부 인터넷 사용 금지"></textarea>
+        </div>
+        <div class="ops-panel">
+          <label for="planTitle">플랜</label>
+          <input id="planTitle" type="text" placeholder="예: 보안 점검 보고서 작성">
+          <label for="planSteps">플랜 단계</label>
+          <textarea id="planSteps" placeholder="한 줄에 하나씩 입력"></textarea>
+          <label for="attachPath">첨부 파일 경로</label>
+          <input id="attachPath" type="text" placeholder="agent_workspace 안의 파일 경로">
+        </div>
+      </div>
       <div class="actions">
         <button id="run" type="button">실행</button>
         <button id="test" class="secondary" type="button">모델 연결 테스트</button>
         <button id="savePrompt" class="secondary" type="button">프롬프트 저장</button>
+        <button id="saveGoal" class="secondary" type="button">목표 저장</button>
+        <button id="savePlan" class="secondary" type="button">플랜 저장</button>
         <button id="deletePrompt" class="ghost" type="button">프롬프트 삭제</button>
         <button id="download" class="ghost" type="button">결과 다운로드</button>
         <span id="status" class="status">대기 중</span>
@@ -228,6 +279,8 @@ HTML = """<!doctype html>
     const button = document.getElementById("run");
     const testButton = document.getElementById("test");
     const savePromptButton = document.getElementById("savePrompt");
+    const saveGoalButton = document.getElementById("saveGoal");
+    const savePlanButton = document.getElementById("savePlan");
     const deletePromptButton = document.getElementById("deletePrompt");
     const downloadButton = document.getElementById("download");
     const statusText = document.getElementById("status");
@@ -236,7 +289,37 @@ HTML = """<!doctype html>
     const multiAgent = document.getElementById("multiAgent");
     const savedPrompts = document.getElementById("savedPrompts");
     const promptName = document.getElementById("promptName");
+    const promptCategory = document.getElementById("promptCategory");
+    const promptTags = document.getElementById("promptTags");
     const result = document.getElementById("result");
+    const goalTitle = document.getElementById("goalTitle");
+    const goalCriteria = document.getElementById("goalCriteria");
+    const goalConstraints = document.getElementById("goalConstraints");
+    const planTitle = document.getElementById("planTitle");
+    const planSteps = document.getElementById("planSteps");
+    const attachPath = document.getElementById("attachPath");
+
+    function lineList(value) {
+      return value.split("\\n").map((item) => item.trim()).filter(Boolean);
+    }
+
+    function collectOpsContext() {
+      return {
+        model: modelSelect.value,
+        multi_agent: multiAgent.checked,
+        goal: {
+          title: goalTitle.value.trim(),
+          criteria: lineList(goalCriteria.value),
+          constraints: lineList(goalConstraints.value),
+          notes: [],
+        },
+        plan: {
+          title: planTitle.value.trim(),
+          steps: lineList(planSteps.value),
+        },
+        attach_path: attachPath.value.trim(),
+      };
+    }
 
     async function loadModels() {
       const response = await fetch("/api/models");
@@ -268,6 +351,8 @@ HTML = """<!doctype html>
         option.value = item.name;
         option.textContent = item.name;
         option.dataset.content = item.content;
+        option.dataset.category = item.category || "";
+        option.dataset.tags = (item.tags || []).join(", ");
         savedPrompts.appendChild(option);
       }
     }
@@ -301,6 +386,7 @@ HTML = """<!doctype html>
           prompt,
           model: modelSelect.value,
           multi_agent: multiAgent.checked,
+          ...collectOpsContext(),
         });
         result.textContent = data.result;
         statusText.textContent = data.wiki_path ? `완료 / 기록 저장: ${data.wiki_path}` : "완료";
@@ -319,6 +405,8 @@ HTML = """<!doctype html>
       }
       promptName.value = selected.value;
       promptInput.value = selected.dataset.content || "";
+      promptCategory.value = selected.dataset.category || "";
+      promptTags.value = selected.dataset.tags || "";
       statusText.textContent = "프롬프트 불러옴";
     });
 
@@ -332,7 +420,12 @@ HTML = """<!doctype html>
 
       savePromptButton.disabled = true;
       try {
-        await postJson("/api/prompts/save", { name, content });
+        await postJson("/api/prompts/save", {
+          name,
+          content,
+          category: promptCategory.value.trim(),
+          tags: lineList(promptTags.value.replaceAll(",", "\\n")),
+        });
         await loadPrompts();
         savedPrompts.value = name;
         statusText.textContent = "프롬프트 저장됨";
@@ -341,6 +434,32 @@ HTML = """<!doctype html>
         statusText.textContent = "저장 실패";
       } finally {
         savePromptButton.disabled = false;
+      }
+    });
+
+    saveGoalButton.addEventListener("click", async () => {
+      saveGoalButton.disabled = true;
+      try {
+        const data = await postJson("/api/goals/save", collectOpsContext());
+        statusText.textContent = `목표 저장됨: ${data.path}`;
+      } catch (error) {
+        result.textContent = `목표 저장 실패: ${error.message}`;
+        statusText.textContent = "목표 저장 실패";
+      } finally {
+        saveGoalButton.disabled = false;
+      }
+    });
+
+    savePlanButton.addEventListener("click", async () => {
+      savePlanButton.disabled = true;
+      try {
+        const data = await postJson("/api/plans/save", collectOpsContext());
+        statusText.textContent = `플랜 저장됨: ${data.path}`;
+      } catch (error) {
+        result.textContent = `플랜 저장 실패: ${error.message}`;
+        statusText.textContent = "플랜 저장 실패";
+      } finally {
+        savePlanButton.disabled = false;
       }
     });
 
@@ -445,8 +564,16 @@ def load_prompt_store() -> list[dict[str, str]]:
             continue
         name = str(item.get("name", "")).strip()
         content = str(item.get("content", "")).strip()
+        category = str(item.get("category", "")).strip()
+        tags = item.get("tags", [])
+        if isinstance(tags, str):
+            tags = [part.strip() for part in tags.split(",") if part.strip()]
+        elif isinstance(tags, list):
+            tags = [str(part).strip() for part in tags if str(part).strip()]
+        else:
+            tags = []
         if name and content:
-            clean_prompts.append({"name": name, "content": content})
+            clean_prompts.append({"name": name, "content": content, "category": category, "tags": tags})
     return clean_prompts
 
 
@@ -469,17 +596,83 @@ def markdown_escape(value: str) -> str:
     return value.replace("|", "\\|").strip()
 
 
+def mask_sensitive(value: str) -> str:
+    if not MASK_SENSITIVE_LOGS:
+        return value
+    masked = re.sub(r"(?i)(api[_-]?key|authorization|bearer)\s*[:=]\s*[\w./+=-]+", r"\1=***", value)
+    masked = re.sub(r"\b\d{1,3}(?:\.\d{1,3}){3}\b", "xxx.xxx.xxx.xxx", masked)
+    return masked
+
+
+def render_web_plan_markdown(plan: dict, *, model_name: str, enable_multi_agent: bool) -> str:
+    title = str(plan.get("title") or "Untitled Plan").strip()
+    steps = [str(item).strip() for item in plan.get("steps", []) if str(item).strip()]
+    lines = [
+        f"# {title}",
+        "",
+        f"- Created: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+        f"- Model: {model_name}",
+        f"- Multi Agent: {'enabled' if enable_multi_agent else 'disabled'}",
+        "",
+        "## Steps",
+        "",
+    ]
+    lines.extend([f"- [ ] {step}" for step in steps] or ["- [ ] No steps yet"])
+    lines.append("")
+    return "\n".join(lines)
+
+
+def save_web_plan(plan: dict, *, model_name: str, enable_multi_agent: bool) -> Path:
+    title = str(plan.get("title") or "").strip()
+    steps = [str(item).strip() for item in plan.get("steps", []) if str(item).strip()]
+    if not title and not steps:
+        raise ValueError("플랜 제목 또는 단계가 필요합니다.")
+    PLAN_DIR.mkdir(parents=True, exist_ok=True)
+    path = PLAN_DIR / f"{common_slugify(title or 'web-plan', 'plan')}.md"
+    path.write_text(render_web_plan_markdown({"title": title, "steps": steps}, model_name=model_name, enable_multi_agent=enable_multi_agent), encoding="utf-8")
+    return path
+
+
+def build_context_files(payload: dict, *, model_name: str, enable_multi_agent: bool) -> dict[str, str]:
+    files = get_harness_skill_files()
+    goal = payload.get("goal") if isinstance(payload.get("goal"), dict) else {}
+    plan = payload.get("plan") if isinstance(payload.get("plan"), dict) else {}
+    if goal and (goal.get("title") or goal.get("criteria") or goal.get("constraints") or goal.get("notes")):
+        files["/goals/current-goal.md"] = goal_to_markdown(goal, model_name=model_name, multi_agent=enable_multi_agent)
+    if plan and (plan.get("title") or plan.get("steps")):
+        files["/plans/current-plan.md"] = render_web_plan_markdown(plan, model_name=model_name, enable_multi_agent=enable_multi_agent)
+
+    attach_path = str(payload.get("attach_path", "")).strip()
+    if attach_path:
+        path = Path(attach_path)
+        if not path.is_absolute():
+            path = WORKSPACE_DIR / path
+        path = path.resolve()
+        if not path.exists() or not path.is_file():
+            raise FileNotFoundError(f"첨부 파일을 찾을 수 없습니다: {path}")
+        try:
+            relative = path.relative_to(WORKSPACE_DIR.resolve()).as_posix()
+            virtual_path = f"/workspace/{relative}"
+        except ValueError:
+            virtual_path = f"/workspace_external/{path.name}"
+        files[virtual_path] = path.read_text(encoding="utf-8")
+    return files
+
+
 def save_wiki_record(
     *,
     prompt: str,
     result: str,
     model_name: str,
     enable_multi_agent: bool,
+    goal_title: str = "",
 ) -> str:
     now = datetime.now()
     day = now.strftime("%Y-%m-%d")
     timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
-    filename = f"{now.strftime('%H%M%S')}-{slugify(prompt)}.md"
+    clean_prompt = mask_sensitive(prompt)
+    clean_result = mask_sensitive(result)
+    filename = f"{now.strftime('%H%M%S')}-{slugify(clean_prompt)}.md"
     day_dir = WIKI_LOG_DIR / day
     day_dir.mkdir(parents=True, exist_ok=True)
     record_path = day_dir / filename
@@ -489,7 +682,7 @@ def save_wiki_record(
     record_path.write_text(
         "\n".join(
             [
-                f"# vLLM 실행 기록 - {prompt[:80]}",
+                f"# vLLM 실행 기록 - {clean_prompt[:80]}",
                 "",
                 "## vLLM Serving",
                 "",
@@ -497,6 +690,7 @@ def save_wiki_record(
                 f"- Model: {model_name}",
                 f"- Registered Models: {model_list}",
                 f"- OpenAI Compatible Base URL: {base_url or 'not configured'}",
+                f"- Goal: {goal_title or 'not set'}",
                 "- Chat Completions Path: /chat/completions",
                 "- Tool Calling Required: yes",
                 "- API Key Stored: no",
@@ -512,11 +706,11 @@ def save_wiki_record(
                 "",
                 "## Prompt",
                 "",
-                prompt,
+                clean_prompt,
                 "",
                 "## Result",
                 "",
-                result,
+                clean_result,
                 "",
             ]
         ),
@@ -528,6 +722,21 @@ def save_wiki_record(
 
 def rebuild_wiki_index() -> None:
     WIKI_LOG_DIR.mkdir(parents=True, exist_ok=True)
+    record_meta = []
+    for record in sorted(WIKI_LOG_DIR.glob("*/*.md"), reverse=True):
+        try:
+            content = record.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        model = "unknown"
+        goal = "not set"
+        for line in content.splitlines():
+            if line.startswith("- Model:"):
+                model = line.split(":", 1)[1].strip() or "unknown"
+            elif line.startswith("- Goal:"):
+                goal = line.split(":", 1)[1].strip() or "not set"
+        record_meta.append({"path": record, "model": model, "goal": goal})
+
     lines = [
         "# vLLM DeepAgents 실행 기록 Wiki",
         "",
@@ -565,6 +774,24 @@ def rebuild_wiki_index() -> None:
             lines.append(f"- [{markdown_escape(title)}]({relative})")
         lines.append("")
 
+    lines.extend(["## By Model", ""])
+    for model in sorted({item["model"] for item in record_meta}):
+        lines.extend([f"### {model}", ""])
+        for item in [entry for entry in record_meta if entry["model"] == model]:
+            relative = item["path"].relative_to(WIKI_LOG_DIR).as_posix()
+            title = item["path"].stem.split("-", 1)[-1].replace("-", " ")
+            lines.append(f"- [{markdown_escape(title)}]({relative})")
+        lines.append("")
+
+    lines.extend(["## By Goal", ""])
+    for goal in sorted({item["goal"] for item in record_meta}):
+        lines.extend([f"### {goal}", ""])
+        for item in [entry for entry in record_meta if entry["goal"] == goal]:
+            relative = item["path"].relative_to(WIKI_LOG_DIR).as_posix()
+            title = item["path"].stem.split("-", 1)[-1].replace("-", " ")
+            lines.append(f"- [{markdown_escape(title)}]({relative})")
+        lines.append("")
+
     (WIKI_LOG_DIR / "index.md").write_text("\n".join(lines), encoding="utf-8")
 
 
@@ -583,13 +810,25 @@ class AgentHandler(BaseHTTPRequestHandler):
         if self.path == "/api/prompts":
             self._send_json({"prompts": load_prompt_store()})
             return
+        if self.path == "/api/workspace":
+            WORKSPACE_DIR.mkdir(parents=True, exist_ok=True)
+            files = [path.relative_to(WORKSPACE_DIR).as_posix() for path in sorted(WORKSPACE_DIR.rglob("*")) if path.is_file()]
+            self._send_json({"workspace": str(WORKSPACE_DIR.resolve()), "files": files[:200]})
+            return
         if self.path not in ("/", "/index.html"):
             self.send_error(HTTPStatus.NOT_FOUND)
             return
         self._send_html(HTML)
 
     def do_POST(self) -> None:
-        if self.path not in ("/api/run", "/api/test-model", "/api/prompts/save", "/api/prompts/delete"):
+        if self.path not in (
+            "/api/run",
+            "/api/test-model",
+            "/api/prompts/save",
+            "/api/prompts/delete",
+            "/api/goals/save",
+            "/api/plans/save",
+        ):
             self.send_error(HTTPStatus.NOT_FOUND)
             return
 
@@ -602,6 +841,12 @@ class AgentHandler(BaseHTTPRequestHandler):
                 return
             if self.path == "/api/prompts/delete":
                 self._delete_prompt(payload)
+                return
+            if self.path == "/api/goals/save":
+                self._save_goal(payload)
+                return
+            if self.path == "/api/plans/save":
+                self._save_plan(payload)
                 return
 
             prompt = str(payload.get("prompt", "")).strip()
@@ -619,6 +864,7 @@ class AgentHandler(BaseHTTPRequestHandler):
                 return
 
             agent = self._get_agent(model_name, enable_multi_agent)
+            files = build_context_files(payload, model_name=model_name, enable_multi_agent=enable_multi_agent)
             response = agent.invoke(
                 {
                     "messages": [
@@ -627,7 +873,7 @@ class AgentHandler(BaseHTTPRequestHandler):
                             "content": prompt,
                         }
                     ],
-                    "files": get_harness_skill_files(),
+                    "files": files,
                 }
             )
             result_text = format_agent_result(response)
@@ -638,6 +884,7 @@ class AgentHandler(BaseHTTPRequestHandler):
                     result=result_text,
                     model_name=model_name,
                     enable_multi_agent=enable_multi_agent,
+                    goal_title=str((payload.get("goal") or {}).get("title", "")),
                 )
             self._send_json({"result": result_text, "wiki_path": wiki_path})
         except Exception as exc:
@@ -646,6 +893,14 @@ class AgentHandler(BaseHTTPRequestHandler):
     def _save_prompt(self, payload: dict) -> None:
         name = str(payload.get("name", "")).strip()
         content = str(payload.get("content", "")).strip()
+        category = str(payload.get("category", "")).strip()
+        tags = payload.get("tags", [])
+        if isinstance(tags, str):
+            tags = [part.strip() for part in tags.split(",") if part.strip()]
+        elif isinstance(tags, list):
+            tags = [str(part).strip() for part in tags if str(part).strip()]
+        else:
+            tags = []
         if not name or not content:
             self._send_json({"error": "name과 content가 필요합니다."}, HTTPStatus.BAD_REQUEST)
             return
@@ -654,7 +909,7 @@ class AgentHandler(BaseHTTPRequestHandler):
             return
 
         prompts = [item for item in load_prompt_store() if item["name"] != name]
-        prompts.append({"name": name, "content": content})
+        prompts.append({"name": name, "content": content, "category": category, "tags": tags})
         save_prompt_store(prompts)
         self._send_json({"ok": True, "prompts": load_prompt_store()})
 
@@ -667,6 +922,28 @@ class AgentHandler(BaseHTTPRequestHandler):
         prompts = [item for item in load_prompt_store() if item["name"] != name]
         save_prompt_store(prompts)
         self._send_json({"ok": True, "prompts": prompts})
+
+    def _save_goal(self, payload: dict) -> None:
+        goal = payload.get("goal") if isinstance(payload.get("goal"), dict) else {}
+        model_name = str(payload.get("model") or DEFAULT_MODEL).strip()
+        enable_multi_agent = bool(payload.get("multi_agent", True))
+        try:
+            path = save_goal_markdown(goal, model_name=model_name, multi_agent=enable_multi_agent)
+        except ValueError as exc:
+            self._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        self._send_json({"ok": True, "path": path.as_posix()})
+
+    def _save_plan(self, payload: dict) -> None:
+        plan = payload.get("plan") if isinstance(payload.get("plan"), dict) else {}
+        model_name = str(payload.get("model") or DEFAULT_MODEL).strip()
+        enable_multi_agent = bool(payload.get("multi_agent", True))
+        try:
+            path = save_web_plan(plan, model_name=model_name, enable_multi_agent=enable_multi_agent)
+        except ValueError as exc:
+            self._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        self._send_json({"ok": True, "path": path.as_posix()})
 
     def log_message(self, format: str, *args) -> None:
         print(f"[web] {self.address_string()} - {format % args}")

@@ -4,6 +4,17 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from doctor import run_doctor
+from ops_common import (
+    goal_dir,
+    goal_to_markdown,
+    list_markdown_names,
+    load_goal_markdown,
+    load_session,
+    save_goal_markdown,
+    save_session,
+    session_dir,
+)
 from app_closed import (
     build_agent,
     get_available_models,
@@ -44,6 +55,19 @@ Commands
   /plan load <name>     Load a saved plan
   /plan clear           Clear current plan
   /plans                List saved plans
+  /goal new <title>     Start a goal
+  /goal criteria <text> Add success criteria
+  /goal constraint <t>  Add a constraint
+  /goal note <text>     Add a goal note
+  /goal show            Show current goal
+  /goal save [name]     Save current goal as Markdown
+  /goal load <name>     Load a saved goal
+  /goal clear           Clear current goal
+  /goals                List saved goals
+  /session save <name>  Save session as JSON and Markdown
+  /session load <name>  Load a saved session
+  /sessions             List saved sessions
+  /doctor               Run closed-network diagnostics
   /exit                 Quit
 
 Input
@@ -58,11 +82,13 @@ class ChatState:
     enable_multi_agent: bool
     workspace_dir: Path
     plan_dir: Path
+    goal_dir: Path
     messages: list[dict[str, str]] = field(default_factory=list)
     last_user_prompt: str = ""
     attached_files: dict[str, str] = field(default_factory=dict)
     plan_title: str = ""
     plan_steps: list[dict[str, str]] = field(default_factory=list)
+    goal: dict = field(default_factory=lambda: {"title": "", "criteria": [], "constraints": [], "notes": []})
 
 
 class ChatAgentCache:
@@ -96,6 +122,7 @@ def print_status(state: ChatState) -> None:
     print(f"Skill List     : {', '.join(get_harness_skill_names()) or 'none'}")
     print(f"Workspace      : {state.workspace_dir}")
     print(f"Attached Files : {len(state.attached_files)}")
+    print(f"Goal           : {state.goal.get('title') or 'none'}")
     print(f"Plan           : {state.plan_title or 'none'} ({len(state.plan_steps)} steps)")
     print(f"Turns          : {len([m for m in state.messages if m['role'] == 'user'])}")
     print("-" * 78)
@@ -131,6 +158,12 @@ def invoke_chat(cache: ChatAgentCache, state: ChatState, prompt: str) -> str:
     agent = cache.get(state)
     files = get_harness_skill_files()
     files.update(state.attached_files)
+    if state.goal.get("title") or state.goal.get("criteria") or state.goal.get("constraints") or state.goal.get("notes"):
+        files["/goals/current-goal.md"] = goal_to_markdown(
+            state.goal,
+            model_name=state.model_name,
+            multi_agent=state.enable_multi_agent,
+        )
     response = agent.invoke(
         {
             "messages": state.messages,
@@ -145,6 +178,7 @@ def invoke_chat(cache: ChatAgentCache, state: ChatState, prompt: str) -> str:
         result=result,
         model_name=state.model_name,
         enable_multi_agent=state.enable_multi_agent,
+        goal_title=str(state.goal.get("title") or ""),
     )
     return result
 
@@ -384,6 +418,125 @@ def load_plan(state: ChatState, name: str) -> None:
     print(f"Plan loaded: {state.plan_title}")
 
 
+def handle_goal_command(state: ChatState, args: str) -> None:
+    command, _, value = args.partition(" ")
+    command = command.lower().strip()
+    value = value.strip()
+
+    if command == "new":
+        if not value:
+            print("Usage: /goal new <title>")
+            return
+        state.goal = {"title": value, "criteria": [], "constraints": [], "notes": []}
+        print(f"Goal started: {value}")
+    elif command == "criteria":
+        if not value:
+            print("Usage: /goal criteria <text>")
+            return
+        state.goal.setdefault("criteria", []).append(value)
+        print(f"Goal criteria added: {value}")
+    elif command == "constraint":
+        if not value:
+            print("Usage: /goal constraint <text>")
+            return
+        state.goal.setdefault("constraints", []).append(value)
+        print(f"Goal constraint added: {value}")
+    elif command == "note":
+        if not value:
+            print("Usage: /goal note <text>")
+            return
+        state.goal.setdefault("notes", []).append(value)
+        print(f"Goal note added: {value}")
+    elif command == "show":
+        print(goal_to_markdown(state.goal, model_name=state.model_name, multi_agent=state.enable_multi_agent))
+    elif command == "save":
+        try:
+            path = save_goal_markdown(
+                state.goal,
+                value,
+                model_name=state.model_name,
+                multi_agent=state.enable_multi_agent,
+            )
+            print(f"Goal saved: {path}")
+        except ValueError as exc:
+            print(exc)
+    elif command == "load":
+        if not value:
+            print("Usage: /goal load <name>")
+            return
+        try:
+            state.goal = load_goal_markdown(value)
+            print(f"Goal loaded: {state.goal.get('title')}")
+        except FileNotFoundError as exc:
+            print(f"Goal not found: {exc}")
+    elif command == "clear":
+        state.goal = {"title": "", "criteria": [], "constraints": [], "notes": []}
+        print("Goal cleared.")
+    else:
+        print("Usage: /goal new|criteria|constraint|note|show|save|load|clear")
+
+
+def list_goals() -> None:
+    names = list_markdown_names(goal_dir())
+    if not names:
+        print("No saved goals.")
+        return
+    for name in names:
+        print(f"- {name}")
+
+
+def handle_session_command(state: ChatState, args: str) -> None:
+    command, _, value = args.partition(" ")
+    command = command.lower().strip()
+    value = value.strip()
+
+    if command == "save":
+        if not value:
+            print("Usage: /session save <name>")
+            return
+        try:
+            json_path, md_path = save_session(state, value)
+            print(f"Session saved: {json_path}")
+            print(f"Session wiki: {md_path}")
+        except ValueError as exc:
+            print(exc)
+    elif command == "load":
+        if not value:
+            print("Usage: /session load <name>")
+            return
+        try:
+            payload = load_session(value)
+        except FileNotFoundError as exc:
+            print(f"Session not found: {exc}")
+            return
+        state.model_name = str(payload.get("model_name") or state.model_name)
+        state.enable_multi_agent = bool(payload.get("enable_multi_agent", state.enable_multi_agent))
+        state.workspace_dir = Path(payload.get("workspace_dir") or state.workspace_dir).resolve()
+        state.goal = payload.get("goal") or {"title": "", "criteria": [], "constraints": [], "notes": []}
+        plan = payload.get("plan") or {}
+        state.plan_title = str(plan.get("title") or "")
+        state.plan_steps = list(plan.get("steps") or [])
+        state.messages = list(payload.get("messages") or [])
+        state.attached_files = dict(payload.get("attached_file_contents") or {})
+        print(f"Session loaded: {value}")
+    else:
+        print("Usage: /session save|load <name>")
+
+
+def list_sessions() -> None:
+    names = list_markdown_names(session_dir())
+    if not names:
+        print("No saved sessions.")
+        return
+    for name in names:
+        print(f"- {name}")
+
+
+def run_doctor_command() -> None:
+    for line in run_doctor():
+        print(line)
+
+
 def handle_model_command(state: ChatState, args: str) -> None:
     models = get_available_models()
     if not args:
@@ -425,7 +578,9 @@ def list_prompts() -> None:
         print("No saved prompts.")
         return
     for item in prompts:
-        print(f"- {item['name']}")
+        category = f" [{item.get('category')}]" if item.get("category") else ""
+        tags = f" #{', #'.join(item.get('tags', []))}" if item.get("tags") else ""
+        print(f"- {item['name']}{category}{tags}")
 
 
 def load_prompt(name: str) -> str | None:
@@ -519,6 +674,16 @@ def handle_command(command: str, cache: ChatAgentCache, state: ChatState) -> boo
         handle_plan_command(state, args)
     elif name == "/plans":
         list_plans(state)
+    elif name == "/goal":
+        handle_goal_command(state, args)
+    elif name == "/goals":
+        list_goals()
+    elif name == "/session":
+        handle_session_command(state, args)
+    elif name == "/sessions":
+        list_sessions()
+    elif name == "/doctor":
+        run_doctor_command()
     elif name == "/paste":
         prompt = read_paste()
         if prompt:
@@ -537,6 +702,7 @@ def main() -> None:
         enable_multi_agent=os.getenv("ENABLE_MULTI_AGENT", "true").lower() in ("1", "true", "yes", "y"),
         workspace_dir=Path(os.getenv("CHAT_WORKSPACE_DIR", "agent_workspace")).resolve(),
         plan_dir=Path(os.getenv("PLAN_DIR", "plans")).resolve(),
+        goal_dir=Path(os.getenv("GOAL_DIR", "goals")).resolve(),
     )
     cache = ChatAgentCache()
     print_banner(state)

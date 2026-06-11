@@ -33,6 +33,8 @@ Copy-Item -Force (Join-Path $Root "app_closed.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "web_closed.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "console_ui.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "chat_cli.py") $BundleProjectDir
+Copy-Item -Force (Join-Path $Root "doctor.py") $BundleProjectDir
+Copy-Item -Force (Join-Path $Root "ops_common.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "requirements.txt") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root ".env.example") $BundleProjectDir
 Copy-Item -Recurse -Force (Join-Path $Root "scripts") $BundleProjectDir
@@ -40,7 +42,27 @@ Copy-Item -Recurse -Force (Join-Path $Root "skills") $BundleProjectDir
 Copy-Item -Recurse -Force $PackageDir $BundleDir
 Copy-Item -Recurse -Force $DeepAgentsSource $BundleSourceDir
 
+$ManifestPath = Join-Path $BundleDir "bundle_manifest.json"
+$ProjectFiles = Get-ChildItem -Path $BundleProjectDir -Recurse -File | ForEach-Object {
+    $_.FullName.Substring($BundleProjectDir.Length + 1).Replace("\", "/")
+}
+$WheelFiles = Get-ChildItem -Path (Join-Path $BundleDir "offline_packages") -File | ForEach-Object {
+    $_.Name
+}
+$Manifest = [ordered]@{
+    created_at = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+    python_version = (& python --version)
+    project = "deepagent"
+    project_files = @($ProjectFiles)
+    requirements = Get-Content $Requirements
+    wheel_files = @($WheelFiles)
+    official_deepagents_source = "deepagents_official_source"
+}
+$Manifest | ConvertTo-Json -Depth 5 | Set-Content -Encoding UTF8 $ManifestPath
+
 Write-Host ""
 Write-Host "완료"
 Write-Host "폐쇄망 PC로 아래 폴더를 통째로 복사하세요:"
 Write-Host $BundleDir
+Write-Host "번들 매니페스트:"
+Write-Host $ManifestPath
