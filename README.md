@@ -16,6 +16,7 @@
 deepagent/
 ├─ app_closed.py
 ├─ web_closed.py
+├─ console_ui.py
 ├─ skills/
 │  ├─ security-report/
 │  ├─ access-audit/
@@ -42,7 +43,7 @@ deepagent/
 5. Python 가상환경 생성
 6. offline_packages만 사용해서 오프라인 설치
 7. .env 작성
-8. app_closed.py 또는 web_closed.py 실행
+8. app_closed.py, web_closed.py 또는 console_ui.py 실행
 ```
 
 ## 1. 외부 인터넷 PC에서 준비
@@ -304,6 +305,26 @@ API Key는 기록하지 않습니다.
 WIKI_LOG_DIR=wiki_logs
 WIKI_LOG_STYLE=vllm
 ```
+
+## 8. 콘솔 UI로 실행
+
+브라우저 없이 PowerShell 콘솔에서 메뉴 기반으로 사용하려면 아래 명령을 실행합니다.
+
+```powershell
+python console_ui.py
+```
+
+콘솔 UI에서 가능한 작업:
+
+- 등록 모델 선택
+- 프롬프트 입력/수정
+- 저장된 프롬프트 불러오기/저장/삭제
+- 멀티에이전트 ON/OFF
+- 하네스 스킬 ON/OFF
+- 모델 연결 테스트
+- 실행 결과를 vLLM 위키 Markdown으로 자동 기록
+
+Windows 기본 콘솔에서도 동작하도록 추가 UI 패키지를 사용하지 않습니다.
 
 ## 실패 시 먼저 확인
 
