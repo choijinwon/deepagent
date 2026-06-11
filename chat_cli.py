@@ -3,7 +3,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from autofix_common import analyze_log_file, render_fix_report, save_fix_report
+from autofix_common import analyze_log_file, analyze_log_text, render_fix_report, save_fix_report
+from dev_common import render_dev_run_markdown, run_development_command, save_dev_run
 from doctor import run_doctor
 from ml_common import (
     ensure_model_catalog,
@@ -92,6 +93,11 @@ Commands
   /session load <name>  Load a saved session
   /sessions             List saved sessions
   /doctor               Run closed-network diagnostics
+  /dev run <cmd>        Run a development command and save its log
+  /dev fix <cmd>        Run command, analyze failure, ask agent for fixes
+  /dev fix-log <path>   Analyze an existing dev/job log
+  /dev attach           Attach last dev log and fix report
+  /dev last             Show last dev run paths
   /catalog              Create/show offline model catalog
   /experiment <models>  Run last prompt across comma-separated models
   /scaffold sample      Show paste scaffold sample
@@ -126,6 +132,8 @@ class ChatState:
     goal: dict = field(default_factory=lambda: {"title": "", "criteria": [], "constraints": [], "notes": []})
     last_scaffold_files: list[Path] = field(default_factory=list)
     last_scaffold_summary: str = ""
+    last_dev_log_path: Path | None = None
+    last_dev_fix_path: Path | None = None
 
 
 class ChatAgentCache:
@@ -772,6 +780,124 @@ def handle_register_command(state: ChatState, args: str) -> None:
         print("Usage: /register scan|scaffold|report|fix-log <path>")
 
 
+def attach_dev_artifacts(state: ChatState) -> int:
+    attached = 0
+    if state.last_dev_log_path and state.last_dev_log_path.exists():
+        state.attached_files["/dev/last-run.md"] = state.last_dev_log_path.read_text(encoding="utf-8")
+        attached += 1
+    if state.last_dev_fix_path and state.last_dev_fix_path.exists():
+        state.attached_files["/dev/last-fix-plan.md"] = state.last_dev_fix_path.read_text(encoding="utf-8")
+        attached += 1
+    return attached
+
+
+def build_dev_fix_prompt(command: str, log_path: Path, fix_path: Path, exit_code: int) -> str:
+    return f"""
+개발 명령 실행 결과를 분석해서 수정안을 만들어줘.
+
+조건:
+- 원본 파일을 무리하게 크게 바꾸지 말고, 실패 원인과 관련된 최소 수정만 제안한다.
+- 필요한 파일을 먼저 읽어야 하면 `/read <path>`로 확인할 파일을 알려준다.
+- 바로 적용 가능한 수정이 명확하면 `/write <path>`에 넣을 최종 파일 내용 또는 패치 방향을 구체적으로 작성한다.
+- 폐쇄망 환경이므로 외부 다운로드, 외부 웹 검색, 외부 SaaS API 사용을 전제로 하지 않는다.
+- requirements 수정이 필요하면 오프라인 wheel 번들 재생성 필요 여부도 같이 적는다.
+
+명령:
+```text
+{command}
+```
+
+종료 코드: {exit_code}
+실행 로그: {log_path}
+Auto Fix 리포트: {fix_path}
+
+첨부된 `/dev/last-run.md`와 `/dev/last-fix-plan.md`를 기준으로 원인, 수정 대상 파일, 검증 명령을 정리해줘.
+""".strip()
+
+
+def handle_dev_command(cache: ChatAgentCache, state: ChatState, args: str) -> None:
+    command, _, value = args.partition(" ")
+    command = command.lower().strip()
+    value = value.strip()
+
+    if command in ("", "help"):
+        print(
+            "\n".join(
+                [
+                    "Usage:",
+                    "  /folder <path>          Set development workspace first, for example `/folder .`",
+                    "  /dev run <command>      Run command and save dev log",
+                    "  /dev fix <command>      Run command, analyze errors, ask agent for fix",
+                    "  /dev fix-log <path>     Analyze existing log and attach fix report",
+                    "  /dev attach             Attach last dev log/fix report",
+                    "  /dev last               Show last dev paths",
+                ]
+            )
+        )
+        return
+
+    if command == "last":
+        print(f"Last dev log : {state.last_dev_log_path or 'none'}")
+        print(f"Last fix plan: {state.last_dev_fix_path or 'none'}")
+        return
+
+    if command == "attach":
+        attached = attach_dev_artifacts(state)
+        print(f"Attached dev artifacts: {attached}")
+        return
+
+    if command == "run":
+        if not value:
+            print("Usage: /dev run <command>")
+            return
+        print_status_line(f"[dev] 실행: {value}")
+        result = run_development_command(value, state.workspace_dir)
+        log_path = save_dev_run(result)
+        state.last_dev_log_path = log_path
+        print_markdown_result("Dev Run", render_dev_run_markdown(result), border_style="green" if result.exit_code == 0 else "red")
+        print_status_line(f"Dev log saved: {log_path}", "green" if result.exit_code == 0 else "yellow")
+        return
+
+    if command == "fix-log":
+        if not value:
+            print("Usage: /dev fix-log <log-file>")
+            return
+        try:
+            report = analyze_log_file(value)
+            fix_path = save_fix_report(report)
+        except Exception as exc:
+            print(f"Dev fix-log failed: {exc}")
+            return
+        state.last_dev_fix_path = fix_path
+        state.attached_files["/dev/last-fix-plan.md"] = fix_path.read_text(encoding="utf-8")
+        print_markdown_result("Dev Auto Fix", render_fix_report(report), border_style="yellow")
+        print_status_line(f"Fix report saved and attached: {fix_path}", "green")
+        return
+
+    if command == "fix":
+        if not value:
+            print("Usage: /dev fix <command>")
+            return
+        print_status_line(f"[dev] 실행 후 자동 분석: {value}")
+        result = run_development_command(value, state.workspace_dir)
+        log_path = save_dev_run(result)
+        state.last_dev_log_path = log_path
+        report = analyze_log_text(render_dev_run_markdown(result), source_name=log_path.name)
+        fix_path = save_fix_report(report)
+        state.last_dev_fix_path = fix_path
+        attach_dev_artifacts(state)
+        print_markdown_result("Dev Run", render_dev_run_markdown(result), border_style="green" if result.exit_code == 0 else "red")
+        print_markdown_result("Dev Auto Fix", render_fix_report(report), border_style="yellow")
+        if result.exit_code == 0:
+            print_status_line("명령이 성공했습니다. 로그와 리포트는 저장했지만 수정 요청은 생략합니다.", "green")
+            return
+        prompt = build_dev_fix_prompt(value, log_path, fix_path, result.exit_code)
+        run_chat_interactive(cache, state, prompt)
+        return
+
+    print("Usage: /dev run|fix|fix-log|attach|last")
+
+
 def handle_model_command(state: ChatState, args: str) -> None:
     models = get_available_models()
     if not args:
@@ -919,6 +1045,8 @@ def handle_command(command: str, cache: ChatAgentCache, state: ChatState) -> boo
         list_sessions()
     elif name == "/doctor":
         run_doctor_command()
+    elif name == "/dev":
+        handle_dev_command(cache, state, args)
     elif name == "/catalog":
         show_catalog()
     elif name == "/experiment":

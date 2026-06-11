@@ -26,6 +26,7 @@ py-modules = [
   "autofix_common",
   "chat_cli",
   "console_ui",
+  "dev_common",
   "doctor",
   "launcher_cli",
   "ml_common",

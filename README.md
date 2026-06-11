@@ -19,6 +19,7 @@ deepagent/
 ├─ console_ui.py
 ├─ chat_cli.py
 ├─ launcher_cli.py
+├─ dev_common.py
 ├─ doctor.py
 ├─ ops_common.py
 ├─ ml_common.py
@@ -214,6 +215,8 @@ CHAT_WORKSPACE_DIR=agent_workspace
 PLAN_DIR=plans
 GOAL_DIR=goals
 SESSION_DIR=sessions
+DEV_RUN_DIR=dev_runs
+DEV_COMMAND_TIMEOUT=120
 MASK_SENSITIVE_LOGS=true
 MODEL_CATALOG_PATH=model_catalog.json
 EXPERIMENT_DIR=experiments
@@ -464,6 +467,11 @@ deepagent-chat
 /session load <name>  저장된 세션 복구
 /sessions             저장된 세션 목록
 /doctor               폐쇄망 진단 실행
+/dev run <cmd>        개발 명령 실행 후 로그 저장
+/dev fix <cmd>        명령 실행, 오류 분석, 수정안 요청
+/dev fix-log <path>   기존 로그 파일 Auto Fix 분석
+/dev attach           마지막 개발 로그/수정 리포트 첨부
+/dev last             마지막 개발 로그/수정 리포트 경로 보기
 /catalog              모델 카탈로그 생성/보기
 /experiment <models>  마지막 프롬프트를 여러 모델로 비교 실행
 /scaffold sample      붙여넣기 생성기 예시 보기
@@ -483,6 +491,23 @@ CLI도 `rich`가 설치되어 있으면 답변을 Markdown 패널로 렌더링�
 모델 스트리밍이 가능할 때는 라이브 패널이 갱신되고, 스트리밍 미지원 모델은 최종 응답을 Markdown으로 예쁘게 표시합니다.
 응답 원문은 `wiki_logs/`에도 vLLM 위키 Markdown 기록으로 저장됩니다.
 
+### 개발/오류 수정 모드
+
+`deepagent-chat` 안에서 `/dev` 명령을 사용하면 개발 명령을 실행하고 실패 로그를 에이전트에게 바로 넘길 수 있습니다.
+기본 작업 위치는 `CHAT_WORKSPACE_DIR`이며, 실행 로그는 `DEV_RUN_DIR`에 저장됩니다.
+
+```text
+/dev run python -m py_compile app.py
+/dev fix python -m pytest
+/dev fix-log .\logs\job-error.log
+/dev attach
+/dev last
+```
+
+`/dev fix <명령>`은 명령을 실행하고 로그를 저장한 뒤 Auto Fix 리포트를 생성합니다.
+명령이 실패하면 `/dev/last-run.md`와 `/dev/last-fix-plan.md`를 자동 첨부하고 에이전트에게 원인, 수정 대상 파일, 검증 명령을 요청합니다.
+원본 파일 자동 덮어쓰기는 하지 않으며, 제안 내용을 확인한 뒤 `/read`, `/write` 명령으로 적용할 수 있습니다.
+
 작업 폴더와 플랜 저장 위치는 `.env`에서 바꿀 수 있습니다.
 
 ```ini
@@ -490,6 +515,8 @@ CHAT_WORKSPACE_DIR=agent_workspace
 PLAN_DIR=plans
 GOAL_DIR=goals
 SESSION_DIR=sessions
+DEV_RUN_DIR=dev_runs
+DEV_COMMAND_TIMEOUT=120
 MODEL_CATALOG_PATH=model_catalog.json
 EXPERIMENT_DIR=experiments
 SCAFFOLD_OVERWRITE=false

@@ -21,6 +21,7 @@ agent_workspace/
 plans/
 goals/
 sessions/
+dev_runs/
 experiments/
 model_catalog.json
 model_catalog.md
