@@ -27,6 +27,7 @@ from dev_common import (
     save_patch_candidates,
     suggest_development_commands,
 )
+from fix_wizard import run_fix_wizard, render_wizard_result
 from ops_common import session_dir
 from project_wizard import run_project_wizard
 from registration_wizard import run_registration_wizard
@@ -483,6 +484,17 @@ def run_registration_wizard_console() -> None:
     print_status_line(f"등록 위자드 완료: {profile.get('project_name')}", "green")
 
 
+def run_fix_wizard_console() -> None:
+    try:
+        report, fix_path, patch_path = run_fix_wizard()
+    except Exception as exc:
+        print(f"오류수정 위자드 실패: {exc}")
+        return
+    print_markdown_result("Auto Fix Plan", render_fix_report(report), border_style="yellow")
+    print_markdown_result("Patch Candidates", patch_path.read_text(encoding="utf-8"), border_style="yellow")
+    print_markdown_result("AI Studio 오류수정 위자드", render_wizard_result(report, fix_path, patch_path), border_style="cyan")
+
+
 def wait_enter() -> None:
     input("\n계속하려면 Enter를 누르세요.")
 
@@ -517,6 +529,7 @@ def main() -> None:
         print("17. 테스트 재실행")
         print("18. 개발 세션 복구")
         print("19. AI Studio 등록 위자드")
+        print("20. AI Studio 오류수정 위자드")
         print("0. 종료")
 
         choice = input("\n선택: ").strip()
@@ -576,6 +589,9 @@ def main() -> None:
             wait_enter()
         elif choice == "19":
             run_registration_wizard_console()
+            wait_enter()
+        elif choice == "20":
+            run_fix_wizard_console()
             wait_enter()
         elif choice == "0":
             print("종료합니다.")

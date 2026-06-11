@@ -24,6 +24,7 @@ $RequiredProjectFiles = @(
     "launcher_cli.py",
     "dev_common.py",
     "doctor.py",
+    "fix_wizard.py",
     "project_wizard.py",
     "ops_common.py",
     "ml_common.py",

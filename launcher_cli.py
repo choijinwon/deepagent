@@ -12,8 +12,9 @@ MENU = [
     ("4", "console", "메뉴형 콘솔 UI", "deepagent-console", "console_ui"),
     ("5", "scaffold", "아이디어로 폴더/파일 생성", "deepagent-scaffold", "scaffold_cli"),
     ("6", "register", "AI Studio 등록 위자드", "deepagent-register-wizard", "registration_wizard"),
-    ("7", "doctor", "폐쇄망 환경 진단", "deepagent-doctor", "doctor"),
-    ("8", "run", "기본 단발 실행 테스트", "deepagent-run", "app_closed"),
+    ("7", "fix", "AI Studio 오류수정 위자드", "deepagent-fix-wizard", "fix_wizard"),
+    ("8", "doctor", "폐쇄망 환경 진단", "deepagent-doctor", "doctor"),
+    ("9", "run", "기본 단발 실행 테스트", "deepagent-run", "app_closed"),
 ]
 
 ONBOARDING = [
@@ -28,8 +29,8 @@ ONBOARDING = [
         "2",
         "fix",
         "학습 Job 오류를 고치고 싶어요",
-        "chat_cli",
-        "deepagent-chat에서 /register fix-log 또는 /dev fix-log로 오류 로그 분석",
+        "fix_wizard",
+        "오류 로그 파일 경로를 입력하면 원인/조치/패치 후보/재검증 명령 생성",
     ),
     (
         "3",
@@ -148,6 +149,8 @@ def dispatch(module_name: str) -> None:
         from scaffold_cli import main
     elif module_name == "registration_wizard":
         from registration_wizard import main
+    elif module_name == "fix_wizard":
+        from fix_wizard import main
     elif module_name == "doctor":
         from doctor import main
     elif module_name == "app_closed":
@@ -179,8 +182,6 @@ def main() -> None:
         if choice:
             title, module_name = choice
             print_markdown_result("시작", f"**{title}** 실행", border_style="cyan")
-            if module_name == "chat_cli":
-                print_status_line("오류 로그 분석은 chat CLI 실행 후 `/register fix-log <로그파일>` 또는 `/dev fix-log <로그파일>`를 사용하세요.", "cyan")
             dispatch(module_name)
             return
         print_status_line("선택을 찾을 수 없어 전체 메뉴를 표시합니다.", "yellow")

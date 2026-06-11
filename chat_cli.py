@@ -20,6 +20,7 @@ from dev_common import (
     suggest_development_commands,
 )
 from doctor import run_doctor
+from fix_wizard import render_wizard_result, run_fix_wizard
 from ml_common import (
     ensure_model_catalog,
     save_experiment,
@@ -112,6 +113,7 @@ Commands
   /project new          Ask questions and create a project scaffold
   /project preview      Ask questions and preview project scaffold
   /doctor               Run closed-network diagnostics
+  /fix wizard           Ask for a log path and create an Auto Fix plan
   /dev run <cmd>        Run a development command and save its log
   /dev auto             Auto-select a local validation command and run it
   /dev fix <cmd>        Run command, analyze failure, ask agent for fixes
@@ -134,6 +136,7 @@ Commands
   /register report <p> Save registration profile and report
   /register package <p> Create a zip package for platform handoff
   /register wizard      Ask questions and create registration artifacts
+  /register fix-wizard  Ask for a job log and create an Auto Fix plan
   /register fix-log <p> Analyze job log and create fix plan
   /exit                 Quit
 
@@ -796,6 +799,10 @@ def handle_register_command(state: ChatState, args: str) -> None:
         print_markdown_result("Registration Wizard", summary, border_style="cyan")
         return
 
+    if command == "fix-wizard":
+        handle_fix_command(f"wizard {value}".strip())
+        return
+
     if command == "scan":
         if not value:
             print("Usage: /register scan <project-path>")
@@ -857,6 +864,26 @@ def handle_register_command(state: ChatState, args: str) -> None:
         print(f"Fix report saved: {path}")
     else:
         print("Usage: /register scan|scaffold|report|package|wizard|fix-log <path>")
+
+
+def handle_fix_command(args: str) -> None:
+    command, _, value = args.partition(" ")
+    command = command.lower().strip()
+    value = value.strip()
+    if command and command != "wizard":
+        value = args.strip()
+        command = "wizard"
+    if command not in ("", "wizard"):
+        print("Usage: /fix wizard")
+        return
+    try:
+        report, fix_path, patch_path = run_fix_wizard(log_path=value)
+    except Exception as exc:
+        print(f"Fix wizard failed: {exc}")
+        return
+    print_markdown_result("Auto Fix Plan", render_fix_report(report), border_style="yellow")
+    print_markdown_result("Patch Candidates", patch_path.read_text(encoding="utf-8"), border_style="yellow")
+    print_markdown_result("Fix Wizard", render_wizard_result(report, fix_path, patch_path), border_style="cyan")
 
 
 def attach_dev_artifacts(state: ChatState) -> int:
@@ -1250,6 +1277,8 @@ def handle_command(command: str, cache: ChatAgentCache, state: ChatState) -> boo
         handle_project_command(state, args)
     elif name == "/doctor":
         run_doctor_command()
+    elif name == "/fix":
+        handle_fix_command(args)
     elif name == "/dev":
         handle_dev_command(cache, state, args)
     elif name == "/catalog":

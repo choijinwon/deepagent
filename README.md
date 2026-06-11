@@ -21,6 +21,7 @@ deepagent/
 ├─ launcher_cli.py
 ├─ dev_common.py
 ├─ doctor.py
+├─ fix_wizard.py
 ├─ project_wizard.py
 ├─ ops_common.py
 ├─ ml_common.py
@@ -180,6 +181,7 @@ deepagent-menu     # 선택 메뉴 런처 별칭
 deepagent-chat     # 챗봇형 CLI 직접 실행
 deepagent-project  # 질문형 프로젝트 생성 마법사
 deepagent-register-wizard # AI Studio 등록 위자드
+deepagent-fix-wizard # AI Studio 오류수정 위자드
 deepagent-console  # 메뉴형 콘솔 UI
 deepagent-web      # 웹 UI 실행
 deepagent-doctor   # 폐쇄망 환경 진단
@@ -522,6 +524,7 @@ deepagent-chat
 /project new          질문에 답하면서 새 프로젝트 구조 생성
 /project preview      질문에 답하고 생성 전 미리보기
 /doctor               폐쇄망 진단 실행
+/fix wizard           오류 로그 경로를 입력해 Auto Fix 리포트 생성
 /dev run <cmd>        개발 명령 실행 후 로그 저장
 /dev auto             현재 폴더에서 검증 명령 자동 선택 후 실행
 /dev fix <cmd>        명령 실행, 오류 분석, 수정안 요청
@@ -544,6 +547,7 @@ deepagent-chat
 /register report <path> 등록 프로필과 보고서 저장
 /register package <path> 등록 산출물 zip 패키지 생성
 /register wizard      질문형 AI Studio 등록 위자드 실행
+/register fix-wizard  질문형 AI Studio 오류수정 위자드 실행
 /register fix-log <path> Job 오류 로그 분석 및 수정안 생성
 /exit                 종료
 ```
@@ -555,10 +559,25 @@ CLI도 `rich`가 설치되어 있으면 답변을 Markdown 패널로 렌더링�
 
 ### 개발/오류 수정 모드
 
+처음 온 개발자가 학습 Job 실패 로그를 분석하려면 아래 명령을 실행합니다.
+
+```powershell
+deepagent-fix-wizard
+```
+
+또는 `deepagent` 실행 후 2번을 선택합니다.
+
+```text
+2. 학습 Job 오류를 고치고 싶어요
+```
+
+위자드는 오류 로그 파일 경로와 관련 프로젝트/workspace 경로를 물어본 뒤 `fix_reports/`와 `dev_patches/`에 리포트를 저장합니다.
+
 `deepagent-chat` 안에서 `/dev` 명령을 사용하면 개발 명령을 실행하고 실패 로그를 에이전트에게 바로 넘길 수 있습니다.
 기본 작업 위치는 `CHAT_WORKSPACE_DIR`이며, 실행 로그는 `DEV_RUN_DIR`에 저장됩니다.
 
 ```text
+/fix wizard
 /dev run python -m py_compile app.py
 /dev auto
 /dev fix python -m pytest
@@ -586,6 +605,7 @@ CLI도 `rich`가 설치되어 있으면 답변을 Markdown 패널로 렌더링�
 16. 수정 후보 패치 승인 적용
 17. 테스트 재실행
 18. 개발 세션 복구
+20. AI Studio 오류수정 위자드
 ```
 
 ### 질문형 프로젝트 생성
@@ -901,12 +921,17 @@ Auto Fix 1차 엔진은 아래 유형을 분석합니다.
 - `CUDA out of memory`: batch size, mixed precision, GPU 리소스 조정 제안
 - MLFlow tracking 오류: tracking URI, 인증, experiment, 네트워크 점검
 - Job Template 리소스 오류: queue, CPU/GPU, memory, quota 점검
+- Image/runtime 오류: Python, CUDA, system library, image pull 점검
+- Permission 오류: dataset, artifact, MLflow, service account 권한 점검
+- Entrypoint args 오류: 필수 인자 누락 또는 잘못된 arguments 점검
 
-수정안은 자동 적용하지 않고 Markdown 리포트로 저장합니다.
+수정안은 자동 적용하지 않고 Markdown 리포트와 패치 후보로 저장합니다.
 
 ```text
 fix_reports/
 └─ 20260611-153000-job-error-log-fix-plan.md
+dev_patches/
+└─ 20260611-153000-job-error-log.md
 ```
 
 웹 UI에서는 `AI Studio 등록` 패널에 프로젝트 경로 또는 로그 파일 경로를 입력한 뒤 `등록 분석`, `등록 구조 생성`, `등록 패키지 생성`, `오류 로그 분석` 버튼을 사용합니다.

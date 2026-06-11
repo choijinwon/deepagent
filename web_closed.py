@@ -7,6 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from autofix_common import analyze_log_file, render_fix_report, save_fix_report
+from dev_common import generate_patch_candidates, render_patch_candidates, save_patch_candidates
 from ml_common import ensure_model_catalog, save_experiment, save_model_catalog_markdown
 from ops_common import goal_to_markdown, save_goal_markdown, session_dir, slugify as common_slugify
 from registration_common import (
@@ -1060,8 +1061,8 @@ HTML = """<!doctype html>
       }
       registerFixLogButton.disabled = true;
       try {
-        const data = await postJson("/api/register/fix-log", { log_path });
-        setResultText(data.report);
+        const data = await postJson("/api/register/fix-log", { log_path, project_path: registerPath.value.trim() });
+        setResultText(`${data.report}\n\n${data.patch_report || ""}`);
         statusText.textContent = `오류 분석 저장: ${data.path}`;
       } catch (error) {
         setResultText(`오류 로그 분석 실패: ${error.message}`);
@@ -1977,8 +1978,26 @@ class AgentHandler(BaseHTTPRequestHandler):
             self._send_json({"error": "log_path가 필요합니다."}, HTTPStatus.BAD_REQUEST)
             return
         report = analyze_log_file(log_path)
+        project_path = str(payload.get("project_path", "")).strip()
+        workspace = Path(project_path).expanduser() if project_path else Path.cwd()
+        if not workspace.is_absolute():
+            workspace = (Path.cwd() / workspace).resolve()
+        if not workspace.exists() or not workspace.is_dir():
+            workspace = Path.cwd()
+        report["context"] = {"workspace": workspace.as_posix(), "log_path": log_path}
         path = save_fix_report(report)
-        self._send_json({"ok": True, "path": path.as_posix(), "report": render_fix_report(report)})
+        candidates = generate_patch_candidates(report, workspace)
+        patch_path = save_patch_candidates(candidates, report["source"])
+        self._send_json(
+            {
+                "ok": True,
+                "path": path.as_posix(),
+                "patch_path": patch_path.as_posix(),
+                "retest_command": report.get("retest_command", ""),
+                "report": render_fix_report(report),
+                "patch_report": render_patch_candidates(candidates),
+            }
+        )
 
     def _save_plan(self, payload: dict) -> None:
         plan = payload.get("plan") if isinstance(payload.get("plan"), dict) else {}
