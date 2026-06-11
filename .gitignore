@@ -24,3 +24,5 @@ sessions/
 experiments/
 model_catalog.json
 model_catalog.md
+registrations/
+fix_reports/

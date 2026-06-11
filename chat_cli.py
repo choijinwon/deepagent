@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from autofix_common import analyze_log_file, render_fix_report, save_fix_report
 from doctor import run_doctor
 from ml_common import (
     ensure_model_catalog,
@@ -19,6 +20,12 @@ from ops_common import (
     save_goal_markdown,
     save_session,
     session_dir,
+)
+from registration_common import (
+    render_registration_report,
+    save_registration_profile,
+    scan_project,
+    scaffold_registered_workspace,
 )
 from scaffold_common import (
     SCAFFOLD_SAMPLE,
@@ -87,6 +94,10 @@ Commands
   /scaffold file <path> Create scaffold from a workspace file
   /scaffold last        Show last scaffold result
   /scaffold attach      Attach last scaffold files to context
+  /register scan <path> Analyze an ML project for platform registration
+  /register scaffold <p> Generate standard registration workspace
+  /register report <p> Save registration profile and report
+  /register fix-log <p> Analyze job log and create fix plan
   /exit                 Quit
 
 Input
@@ -666,6 +677,62 @@ def handle_scaffold_command(state: ChatState, args: str) -> None:
     print(f"Scaffold summary: {result.summary_path}")
 
 
+def handle_register_command(state: ChatState, args: str) -> None:
+    command, _, value = args.partition(" ")
+    command = command.lower().strip()
+    value = value.strip()
+
+    if command == "scan":
+        if not value:
+            print("Usage: /register scan <project-path>")
+            return
+        try:
+            profile = scan_project(value)
+        except Exception as exc:
+            print(f"Registration scan failed: {exc}")
+            return
+        print(render_registration_report(profile))
+    elif command == "report":
+        if not value:
+            print("Usage: /register report <project-path>")
+            return
+        try:
+            profile = scan_project(value)
+            json_path, report_path = save_registration_profile(profile)
+        except Exception as exc:
+            print(f"Registration report failed: {exc}")
+            return
+        print(f"Registration profile: {json_path}")
+        print(f"Registration report: {report_path}")
+    elif command == "scaffold":
+        if not value:
+            print("Usage: /register scaffold <project-path>")
+            return
+        try:
+            result = scaffold_registered_workspace(value)
+        except Exception as exc:
+            print(f"Registration scaffold failed: {exc}")
+            return
+        print(f"Registered workspace: {result['workspace']}")
+        print("Generated files:")
+        for filename in result["files"]:
+            print(f"- {filename}")
+    elif command == "fix-log":
+        if not value:
+            print("Usage: /register fix-log <log-file>")
+            return
+        try:
+            report = analyze_log_file(value)
+            path = save_fix_report(report)
+        except Exception as exc:
+            print(f"Auto Fix analysis failed: {exc}")
+            return
+        print(render_fix_report(report))
+        print(f"Fix report saved: {path}")
+    else:
+        print("Usage: /register scan|scaffold|report|fix-log <path>")
+
+
 def handle_model_command(state: ChatState, args: str) -> None:
     models = get_available_models()
     if not args:
@@ -819,6 +886,8 @@ def handle_command(command: str, cache: ChatAgentCache, state: ChatState) -> boo
         handle_experiment_command(cache, state, args)
     elif name == "/scaffold":
         handle_scaffold_command(state, args)
+    elif name == "/register":
+        handle_register_command(state, args)
     elif name == "/paste":
         prompt = read_paste()
         if prompt:

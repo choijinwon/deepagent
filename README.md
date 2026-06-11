@@ -22,6 +22,8 @@ deepagent/
 ├─ ops_common.py
 ├─ ml_common.py
 ├─ scaffold_common.py
+├─ registration_common.py
+├─ autofix_common.py
 ├─ skills/
 │  ├─ security-report/
 │  ├─ access-audit/
@@ -181,6 +183,15 @@ MASK_SENSITIVE_LOGS=true
 MODEL_CATALOG_PATH=model_catalog.json
 EXPERIMENT_DIR=experiments
 SCAFFOLD_OVERWRITE=false
+REGISTRATION_DIR=registrations
+REGISTERED_WORKSPACE_DIR=agent_workspace/registered
+FIX_REPORT_DIR=fix_reports
+MLFLOW_TRACKING_URI=
+ML_PLATFORM_DEFAULT_QUEUE=
+ML_PLATFORM_DEFAULT_GPU=1
+ML_PLATFORM_DEFAULT_CPU=4
+ML_PLATFORM_DEFAULT_MEMORY=16Gi
+ML_PLATFORM_PYTHON_VERSION=3.11
 ```
 
 `QWEN_BASE_URL`에 `/v1`이 붙는지 반드시 확인하세요.
@@ -309,6 +320,7 @@ PROMPT_STORE_PATH=prompt_templates.json
 `작업 생성기` 영역에 템플릿을 붙여넣으면 `agent_workspace/` 아래 폴더와 파일을 자동 생성하고, 목표와 플랜도 함께 저장할 수 있습니다.
 `생성 후 실행` 버튼은 자동 생성된 파일을 에이전트 컨텍스트에 첨부한 뒤 요청을 바로 실행합니다.
 `모델 카탈로그` 버튼은 `model_catalog.json`과 `model_catalog.md`를 생성하고, `모델 비교 실험` 버튼은 등록 모델별 응답을 `experiments/`에 저장합니다.
+`ML Platform 등록` 패널에서는 기존 ML 프로젝트 경로를 분석하고, 플랫폼 등록용 표준 구조와 오류 로그 분석 리포트를 생성할 수 있습니다.
 
 ```text
 wiki_logs/
@@ -408,6 +420,10 @@ python chat_cli.py
 /scaffold file <path> 파일 내용으로 자동 생성
 /scaffold last        마지막 생성 결과 보기
 /scaffold attach      마지막 생성 파일을 에이전트 컨텍스트에 첨부
+/register scan <path> ML 프로젝트 등록 정보 분석
+/register scaffold <path> ML Platform 등록 표준 구조 생성
+/register report <path> 등록 프로필과 보고서 저장
+/register fix-log <path> Job 오류 로그 분석 및 수정안 생성
 /exit                 종료
 ```
 
@@ -424,6 +440,15 @@ SESSION_DIR=sessions
 MODEL_CATALOG_PATH=model_catalog.json
 EXPERIMENT_DIR=experiments
 SCAFFOLD_OVERWRITE=false
+REGISTRATION_DIR=registrations
+REGISTERED_WORKSPACE_DIR=agent_workspace/registered
+FIX_REPORT_DIR=fix_reports
+MLFLOW_TRACKING_URI=
+ML_PLATFORM_DEFAULT_QUEUE=
+ML_PLATFORM_DEFAULT_GPU=1
+ML_PLATFORM_DEFAULT_CPU=4
+ML_PLATFORM_DEFAULT_MEMORY=16Gi
+ML_PLATFORM_PYTHON_VERSION=3.11
 ```
 
 `/add-file`로 첨부한 파일은 DeepAgents 가상 파일 컨텍스트에 함께 전달됩니다.
@@ -501,7 +526,86 @@ runbooks/vllm
 
 `model_catalog.json`은 모델 설명, 컨텍스트 길이, Tool Calling 확인 상태, 권장 temperature, 사용 사례를 기록하는 오프라인 모델 장부입니다.
 
-## 10. 폐쇄망 진단
+## 10. OpenCode IDE 기반 ML Platform 등록 자동화
+
+기존 ML 프로젝트를 분석해 하이닉스 ML Platform 등록에 필요한 초안 파일을 자동 생성합니다.
+1차 구현은 실제 플랫폼 API 호출 없이 오프라인 산출물 생성과 검증 중심입니다.
+
+프로젝트 분석:
+
+```text
+/register scan C:\work\my-model
+```
+
+분석 항목:
+
+- PyTorch, TensorFlow, XGBoost, HuggingFace, Notebook, Legacy script 추정
+- `train.py`, `main.py`, `run.py`, notebook 후보 탐색
+- `requirements.txt`, `pyproject.toml`, `environment.yml` 탐색
+- config 파일과 모델 파일 후보 탐색
+- MLFlow Experiment와 Job Template 기본값 생성
+
+분석 결과를 파일로 저장:
+
+```text
+/register report C:\work\my-model
+```
+
+저장 위치:
+
+```text
+registrations/
+└─ my-model/
+   ├─ registration_profile.json
+   └─ registration_report.md
+```
+
+ML Platform 등록용 표준 구조 생성:
+
+```text
+/register scaffold C:\work\my-model
+```
+
+생성 위치:
+
+```text
+agent_workspace/
+└─ registered/
+   └─ my-model/
+      ├─ README.md
+      ├─ mlflow_config.yaml
+      ├─ job_template.yaml
+      ├─ run_train.ps1
+      ├─ entrypoint.py
+      └─ requirements.lock.txt
+```
+
+원본 프로젝트는 수정하지 않고, 표준 등록 폴더에 래퍼와 템플릿만 생성합니다.
+
+Job 실행 오류 로그 분석:
+
+```text
+/register fix-log agent_workspace\logs\job-error.log
+```
+
+Auto Fix 1차 엔진은 아래 유형을 분석합니다.
+
+- `ModuleNotFoundError`: 누락 패키지와 requirements 추가 제안
+- `FileNotFoundError`: 실행 경로, working directory, config 경로 점검
+- `CUDA out of memory`: batch size, mixed precision, GPU 리소스 조정 제안
+- MLFlow tracking 오류: tracking URI, 인증, experiment, 네트워크 점검
+- Job Template 리소스 오류: queue, CPU/GPU, memory, quota 점검
+
+수정안은 자동 적용하지 않고 Markdown 리포트로 저장합니다.
+
+```text
+fix_reports/
+└─ 20260611-153000-job-error-log-fix-plan.md
+```
+
+웹 UI에서는 `ML Platform 등록` 패널에 프로젝트 경로 또는 로그 파일 경로를 입력한 뒤 `등록 분석`, `등록 구조 생성`, `오류 로그 분석` 버튼을 사용합니다.
+
+## 11. 폐쇄망 진단
 
 Windows 11 폐쇄망 PC에서 설정 문제를 먼저 확인하려면 아래 명령을 실행합니다.
 
@@ -523,7 +627,7 @@ python doctor.py
 - `QWEN_BASE_URL`의 `/v1/models` 호출 확인
 - Tool Calling 설정 확인 안내
 
-## 11. 오프라인 번들 검증
+## 12. 오프라인 번들 검증
 
 외부 PC에서 `prepare_external_pc.ps1`을 실행하면 `offline_bundle/bundle_manifest.json`이 함께 생성됩니다.
 폐쇄망 PC로 복사한 뒤 아래 명령으로 필수 파일 누락 여부를 확인합니다.
@@ -571,6 +675,6 @@ curl http://xxx.xxx.xxx.xxx:포트/v1/models
 `.env` 파일은 민감 정보가 포함되므로 Git에 올리지 않습니다.
 `prompt_templates.json`은 사용자별 프롬프트 저장 파일이므로 Git에 올리지 않습니다.
 `wiki_logs/`는 실행 기록 폴더이므로 Git에 올리지 않습니다.
-`agent_workspace/`, `plans/`, `goals/`, `sessions/`, `experiments/`는 사용자별 작업 파일, 플랜, 목표, 세션, 실험 저장 폴더이므로 Git에 올리지 않습니다.
+`agent_workspace/`, `plans/`, `goals/`, `sessions/`, `experiments/`, `registrations/`, `fix_reports/`는 사용자별 작업 파일, 플랜, 목표, 세션, 실험, 등록 분석, 오류 분석 저장 폴더이므로 Git에 올리지 않습니다.
 `model_catalog.json`과 `model_catalog.md`는 폐쇄망 환경별 모델 장부이므로 기본적으로 Git에 올리지 않습니다.
 `offline_packages/`는 용량이 크고 환경별 wheel이 섞일 수 있으므로 Git에 올리지 않습니다.

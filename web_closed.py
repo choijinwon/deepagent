@@ -6,8 +6,15 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from autofix_common import analyze_log_file, render_fix_report, save_fix_report
 from ml_common import ensure_model_catalog, save_experiment, save_model_catalog_markdown
 from ops_common import goal_to_markdown, save_goal_markdown, session_dir, slugify as common_slugify
+from registration_common import (
+    render_registration_report,
+    save_registration_profile,
+    scan_project,
+    scaffold_registered_workspace,
+)
 from scaffold_common import (
     SCAFFOLD_SAMPLE,
     apply_scaffold,
@@ -277,6 +284,17 @@ HTML = """<!doctype html>
           <button id="experiment" class="ghost" type="button">모델 비교 실험</button>
         </div>
       </div>
+      <div class="scaffold-panel">
+        <label for="registerPath">ML Platform 등록 대상 프로젝트 경로</label>
+        <input id="registerPath" type="text" placeholder="예: C:\\work\\my-model 또는 /workspace/my-model">
+        <label for="registerLogPath">오류 로그 파일 경로</label>
+        <input id="registerLogPath" type="text" placeholder="예: agent_workspace/logs/job-error.log">
+        <div class="actions">
+          <button id="registerScan" class="secondary" type="button">등록 분석</button>
+          <button id="registerScaffold" class="secondary" type="button">등록 구조 생성</button>
+          <button id="registerFixLog" class="ghost" type="button">오류 로그 분석</button>
+        </div>
+      </div>
       <div class="ops-grid">
         <div class="ops-panel">
           <label for="goalTitle">목표</label>
@@ -320,6 +338,9 @@ HTML = """<!doctype html>
     const runScaffoldButton = document.getElementById("runScaffold");
     const catalogButton = document.getElementById("catalog");
     const experimentButton = document.getElementById("experiment");
+    const registerScanButton = document.getElementById("registerScan");
+    const registerScaffoldButton = document.getElementById("registerScaffold");
+    const registerFixLogButton = document.getElementById("registerFixLog");
     const deletePromptButton = document.getElementById("deletePrompt");
     const downloadButton = document.getElementById("download");
     const statusText = document.getElementById("status");
@@ -338,6 +359,8 @@ HTML = """<!doctype html>
     const planSteps = document.getElementById("planSteps");
     const attachPath = document.getElementById("attachPath");
     const scaffoldText = document.getElementById("scaffoldText");
+    const registerPath = document.getElementById("registerPath");
+    const registerLogPath = document.getElementById("registerLogPath");
 
     function lineList(value) {
       return value.split("\\n").map((item) => item.trim()).filter(Boolean);
@@ -595,6 +618,63 @@ HTML = """<!doctype html>
         statusText.textContent = "실험 실패";
       } finally {
         experimentButton.disabled = false;
+      }
+    });
+
+    registerScanButton.addEventListener("click", async () => {
+      const project_path = registerPath.value.trim();
+      if (!project_path) {
+        result.textContent = "프로젝트 경로를 입력하세요.";
+        return;
+      }
+      registerScanButton.disabled = true;
+      try {
+        const data = await postJson("/api/register/scan", { project_path });
+        result.textContent = data.report;
+        statusText.textContent = "등록 분석 완료";
+      } catch (error) {
+        result.textContent = `등록 분석 실패: ${error.message}`;
+        statusText.textContent = "등록 분석 실패";
+      } finally {
+        registerScanButton.disabled = false;
+      }
+    });
+
+    registerScaffoldButton.addEventListener("click", async () => {
+      const project_path = registerPath.value.trim();
+      if (!project_path) {
+        result.textContent = "프로젝트 경로를 입력하세요.";
+        return;
+      }
+      registerScaffoldButton.disabled = true;
+      try {
+        const data = await postJson("/api/register/scaffold", { project_path });
+        result.textContent = data.report;
+        statusText.textContent = `등록 구조 생성: ${data.workspace}`;
+      } catch (error) {
+        result.textContent = `등록 구조 생성 실패: ${error.message}`;
+        statusText.textContent = "등록 구조 생성 실패";
+      } finally {
+        registerScaffoldButton.disabled = false;
+      }
+    });
+
+    registerFixLogButton.addEventListener("click", async () => {
+      const log_path = registerLogPath.value.trim();
+      if (!log_path) {
+        result.textContent = "오류 로그 파일 경로를 입력하세요.";
+        return;
+      }
+      registerFixLogButton.disabled = true;
+      try {
+        const data = await postJson("/api/register/fix-log", { log_path });
+        result.textContent = data.report;
+        statusText.textContent = `오류 분석 저장: ${data.path}`;
+      } catch (error) {
+        result.textContent = `오류 로그 분석 실패: ${error.message}`;
+        statusText.textContent = "오류 분석 실패";
+      } finally {
+        registerFixLogButton.disabled = false;
       }
     });
 
@@ -993,6 +1073,9 @@ class AgentHandler(BaseHTTPRequestHandler):
             "/api/scaffold/preview",
             "/api/scaffold/apply",
             "/api/scaffold/run",
+            "/api/register/scan",
+            "/api/register/scaffold",
+            "/api/register/fix-log",
             "/api/prompts/save",
             "/api/prompts/delete",
             "/api/goals/save",
@@ -1034,6 +1117,15 @@ class AgentHandler(BaseHTTPRequestHandler):
                 return
             if self.path == "/api/scaffold/run":
                 self._scaffold_run(payload)
+                return
+            if self.path == "/api/register/scan":
+                self._register_scan(payload)
+                return
+            if self.path == "/api/register/scaffold":
+                self._register_scaffold(payload)
+                return
+            if self.path == "/api/register/fix-log":
+                self._register_fix_log(payload)
                 return
 
             prompt = str(payload.get("prompt", "")).strip()
@@ -1220,6 +1312,47 @@ class AgentHandler(BaseHTTPRequestHandler):
             + [f"- {item['model']}: {'OK' if item.get('ok') else 'FAIL'}" for item in results]
         )
         self._send_json({"ok": True, "path": path.as_posix(), "summary": summary})
+
+    def _register_scan(self, payload: dict) -> None:
+        project_path = str(payload.get("project_path", "")).strip()
+        if not project_path:
+            self._send_json({"error": "project_path가 필요합니다."}, HTTPStatus.BAD_REQUEST)
+            return
+        profile = scan_project(project_path)
+        json_path, report_path = save_registration_profile(profile)
+        self._send_json(
+            {
+                "ok": True,
+                "profile_path": json_path.as_posix(),
+                "report_path": report_path.as_posix(),
+                "report": render_registration_report(profile),
+            }
+        )
+
+    def _register_scaffold(self, payload: dict) -> None:
+        project_path = str(payload.get("project_path", "")).strip()
+        if not project_path:
+            self._send_json({"error": "project_path가 필요합니다."}, HTTPStatus.BAD_REQUEST)
+            return
+        result = scaffold_registered_workspace(project_path)
+        report = render_registration_report(result["profile"])
+        self._send_json(
+            {
+                "ok": True,
+                "workspace": result["workspace"],
+                "files": result["files"],
+                "report": report,
+            }
+        )
+
+    def _register_fix_log(self, payload: dict) -> None:
+        log_path = str(payload.get("log_path", "")).strip()
+        if not log_path:
+            self._send_json({"error": "log_path가 필요합니다."}, HTTPStatus.BAD_REQUEST)
+            return
+        report = analyze_log_file(log_path)
+        path = save_fix_report(report)
+        self._send_json({"ok": True, "path": path.as_posix(), "report": render_fix_report(report)})
 
     def _save_plan(self, payload: dict) -> None:
         plan = payload.get("plan") if isinstance(payload.get("plan"), dict) else {}
