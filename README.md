@@ -716,11 +716,31 @@ runbooks/vllm
 
 분석 항목:
 
-- PyTorch, TensorFlow, XGBoost, HuggingFace, Notebook, Legacy script 추정
-- `train.py`, `main.py`, `run.py`, notebook 후보 탐색
-- `requirements.txt`, `pyproject.toml`, `environment.yml` 탐색
+- 프로젝트 유형 자동 판별: PyTorch, TensorFlow, XGBoost, HuggingFace, Notebook, Legacy script
+- 실행 방식 자동 추정: `train.py`, `main.py`, `run.py`, `argparse`, `click`, notebook 후보 탐색
+- 환경 파일 자동 분석: `requirements.txt`, `pyproject.toml`, `environment.yml`, `Dockerfile`, lock 파일 탐색
+- 모델 프레임워크별 등록 템플릿 선택: framework별 `job_template.yaml` 힌트 생성
+- GPU/CPU 리소스 추천: framework와 모델 파일 크기를 기준으로 CPU/GPU/memory 초안 생성
+- Notebook/Legacy 프로젝트 등록 가이드 생성
 - config 파일과 모델 파일 후보 탐색
 - MLFlow Experiment와 Job Template 기본값 생성
+
+`registration_report.md`에는 아래 섹션이 생성됩니다.
+
+```text
+Project Type
+Execution
+Environment Files
+Framework Templates
+Resource Recommendation
+Requirements
+Config Files
+Model Files
+MLFlow
+Job Template
+Warnings
+Onboarding Guide
+```
 
 분석 결과를 파일로 저장:
 
