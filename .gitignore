@@ -21,3 +21,6 @@ agent_workspace/
 plans/
 goals/
 sessions/
+experiments/
+model_catalog.json
+model_catalog.md

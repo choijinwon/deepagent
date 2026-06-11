@@ -6,7 +6,15 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from ops_common import goal_to_markdown, save_goal_markdown, slugify as common_slugify
+from ml_common import ensure_model_catalog, save_experiment, save_model_catalog_markdown
+from ops_common import goal_to_markdown, save_goal_markdown, session_dir, slugify as common_slugify
+from scaffold_common import (
+    SCAFFOLD_SAMPLE,
+    apply_scaffold,
+    parse_scaffold_text,
+    render_scaffold_summary,
+    scaffold_to_context_files,
+)
 from app_closed import (
     build_agent,
     get_available_models,
@@ -140,6 +148,19 @@ HTML = """<!doctype html>
       min-height: 86px;
       background: #ffffff;
     }
+    .scaffold-panel {
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 14px;
+      margin: 14px 0;
+      background: #f8fafc;
+    }
+    #scaffoldText {
+      min-height: 230px;
+      background: #ffffff;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 13px;
+    }
     .toggle {
       display: flex;
       align-items: center;
@@ -244,6 +265,18 @@ HTML = """<!doctype html>
       </div>
       <label for="prompt">요청 내용</label>
       <textarea id="prompt">서버 접근권한 보안 점검 TODO 만들어줘.</textarea>
+      <div class="scaffold-panel">
+        <label for="scaffoldText">작업 생성기</label>
+        <textarea id="scaffoldText" placeholder="# Goal, # Plan, # Folders, # Files 형식으로 붙여넣으면 폴더와 파일을 자동 생성합니다."></textarea>
+        <div class="actions">
+          <button id="sampleScaffold" class="ghost" type="button">예시 넣기</button>
+          <button id="previewScaffold" class="secondary" type="button">미리보기</button>
+          <button id="applyScaffold" class="secondary" type="button">자동 생성</button>
+          <button id="runScaffold" type="button">생성 후 실행</button>
+          <button id="catalog" class="ghost" type="button">모델 카탈로그</button>
+          <button id="experiment" class="ghost" type="button">모델 비교 실험</button>
+        </div>
+      </div>
       <div class="ops-grid">
         <div class="ops-panel">
           <label for="goalTitle">목표</label>
@@ -281,6 +314,12 @@ HTML = """<!doctype html>
     const savePromptButton = document.getElementById("savePrompt");
     const saveGoalButton = document.getElementById("saveGoal");
     const savePlanButton = document.getElementById("savePlan");
+    const sampleScaffoldButton = document.getElementById("sampleScaffold");
+    const previewScaffoldButton = document.getElementById("previewScaffold");
+    const applyScaffoldButton = document.getElementById("applyScaffold");
+    const runScaffoldButton = document.getElementById("runScaffold");
+    const catalogButton = document.getElementById("catalog");
+    const experimentButton = document.getElementById("experiment");
     const deletePromptButton = document.getElementById("deletePrompt");
     const downloadButton = document.getElementById("download");
     const statusText = document.getElementById("status");
@@ -298,6 +337,7 @@ HTML = """<!doctype html>
     const planTitle = document.getElementById("planTitle");
     const planSteps = document.getElementById("planSteps");
     const attachPath = document.getElementById("attachPath");
+    const scaffoldText = document.getElementById("scaffoldText");
 
     function lineList(value) {
       return value.split("\\n").map((item) => item.trim()).filter(Boolean);
@@ -318,6 +358,7 @@ HTML = """<!doctype html>
           steps: lineList(planSteps.value),
         },
         attach_path: attachPath.value.trim(),
+        scaffold_text: scaffoldText.value.trim(),
       };
     }
 
@@ -460,6 +501,100 @@ HTML = """<!doctype html>
         statusText.textContent = "플랜 저장 실패";
       } finally {
         savePlanButton.disabled = false;
+      }
+    });
+
+    sampleScaffoldButton.addEventListener("click", async () => {
+      try {
+        const data = await postJson("/api/scaffold/sample", {});
+        scaffoldText.value = data.sample;
+        statusText.textContent = "생성기 예시 입력됨";
+      } catch (error) {
+        result.textContent = `예시 로드 실패: ${error.message}`;
+      }
+    });
+
+    previewScaffoldButton.addEventListener("click", async () => {
+      previewScaffoldButton.disabled = true;
+      try {
+        const data = await postJson("/api/scaffold/preview", collectOpsContext());
+        result.textContent = data.summary;
+        statusText.textContent = "생성 미리보기 완료";
+      } catch (error) {
+        result.textContent = `미리보기 실패: ${error.message}`;
+        statusText.textContent = "미리보기 실패";
+      } finally {
+        previewScaffoldButton.disabled = false;
+      }
+    });
+
+    applyScaffoldButton.addEventListener("click", async () => {
+      applyScaffoldButton.disabled = true;
+      try {
+        const data = await postJson("/api/scaffold/apply", collectOpsContext());
+        result.textContent = data.summary;
+        statusText.textContent = `자동 생성 완료: ${data.summary_path}`;
+      } catch (error) {
+        result.textContent = `자동 생성 실패: ${error.message}`;
+        statusText.textContent = "자동 생성 실패";
+      } finally {
+        applyScaffoldButton.disabled = false;
+      }
+    });
+
+    runScaffoldButton.addEventListener("click", async () => {
+      const prompt = promptInput.value.trim();
+      if (!prompt) {
+        result.textContent = "요청 내용을 입력하세요.";
+        return;
+      }
+      runScaffoldButton.disabled = true;
+      statusText.textContent = "생성 후 실행 중...";
+      try {
+        const data = await postJson("/api/scaffold/run", {
+          prompt,
+          ...collectOpsContext(),
+        });
+        result.textContent = data.result;
+        statusText.textContent = data.wiki_path ? `완료 / 기록 저장: ${data.wiki_path}` : "완료";
+      } catch (error) {
+        result.textContent = `생성 후 실행 실패: ${error.message}`;
+        statusText.textContent = "실패";
+      } finally {
+        runScaffoldButton.disabled = false;
+      }
+    });
+
+    catalogButton.addEventListener("click", async () => {
+      try {
+        const data = await postJson("/api/catalog", {});
+        result.textContent = data.markdown;
+        statusText.textContent = `모델 카탈로그 저장: ${data.path}`;
+      } catch (error) {
+        result.textContent = `카탈로그 실패: ${error.message}`;
+      }
+    });
+
+    experimentButton.addEventListener("click", async () => {
+      const prompt = promptInput.value.trim();
+      if (!prompt) {
+        result.textContent = "비교할 요청 내용을 입력하세요.";
+        return;
+      }
+      experimentButton.disabled = true;
+      statusText.textContent = "모델 비교 실험 중...";
+      try {
+        const data = await postJson("/api/experiment", {
+          prompt,
+          ...collectOpsContext(),
+        });
+        result.textContent = data.summary;
+        statusText.textContent = `실험 저장: ${data.path}`;
+      } catch (error) {
+        result.textContent = `실험 실패: ${error.message}`;
+        statusText.textContent = "실험 실패";
+      } finally {
+        experimentButton.disabled = false;
       }
     });
 
@@ -659,6 +794,34 @@ def build_context_files(payload: dict, *, model_name: str, enable_multi_agent: b
     return files
 
 
+def scaffold_payload(payload: dict, *, model_name: str, enable_multi_agent: bool, write_files: bool):
+    text = str(payload.get("scaffold_text", "")).strip()
+    if not text:
+        raise ValueError("작업 생성기 텍스트가 비어 있습니다.")
+    spec = parse_scaffold_text(text)
+    result = apply_scaffold(
+        spec,
+        WORKSPACE_DIR,
+        plan_dir=PLAN_DIR,
+        session_dir=session_dir(),
+        model_name=model_name,
+        enable_multi_agent=enable_multi_agent,
+        write_files=write_files,
+    )
+    return spec, result
+
+
+def scaffold_result_payload(spec, result) -> dict:
+    return {
+        "summary": render_scaffold_summary(spec, result),
+        "summary_path": result.summary_path.as_posix() if result.summary_path else "",
+        "created_dirs": [path.as_posix() for path in result.created_dirs],
+        "created_files": [path.as_posix() for path in result.created_files],
+        "goal_path": result.goal_path.as_posix() if result.goal_path else "",
+        "plan_path": result.plan_path.as_posix() if result.plan_path else "",
+    }
+
+
 def save_wiki_record(
     *,
     prompt: str,
@@ -824,6 +987,12 @@ class AgentHandler(BaseHTTPRequestHandler):
         if self.path not in (
             "/api/run",
             "/api/test-model",
+            "/api/catalog",
+            "/api/experiment",
+            "/api/scaffold/sample",
+            "/api/scaffold/preview",
+            "/api/scaffold/apply",
+            "/api/scaffold/run",
             "/api/prompts/save",
             "/api/prompts/delete",
             "/api/goals/save",
@@ -847,6 +1016,24 @@ class AgentHandler(BaseHTTPRequestHandler):
                 return
             if self.path == "/api/plans/save":
                 self._save_plan(payload)
+                return
+            if self.path == "/api/catalog":
+                self._catalog()
+                return
+            if self.path == "/api/experiment":
+                self._experiment(payload)
+                return
+            if self.path == "/api/scaffold/sample":
+                self._send_json({"sample": SCAFFOLD_SAMPLE})
+                return
+            if self.path == "/api/scaffold/preview":
+                self._scaffold(payload, write_files=False)
+                return
+            if self.path == "/api/scaffold/apply":
+                self._scaffold(payload, write_files=True)
+                return
+            if self.path == "/api/scaffold/run":
+                self._scaffold_run(payload)
                 return
 
             prompt = str(payload.get("prompt", "")).strip()
@@ -933,6 +1120,106 @@ class AgentHandler(BaseHTTPRequestHandler):
             self._send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
         self._send_json({"ok": True, "path": path.as_posix()})
+
+    def _catalog(self) -> None:
+        catalog, json_path = ensure_model_catalog(MODEL_OPTIONS)
+        md_path = save_model_catalog_markdown(catalog)
+        self._send_json(
+            {
+                "ok": True,
+                "path": json_path.as_posix(),
+                "markdown_path": md_path.as_posix(),
+                "markdown": md_path.read_text(encoding="utf-8"),
+            }
+        )
+
+    def _scaffold(self, payload: dict, *, write_files: bool) -> None:
+        model_name = str(payload.get("model") or DEFAULT_MODEL).strip()
+        enable_multi_agent = bool(payload.get("multi_agent", True))
+        spec, result = scaffold_payload(
+            payload,
+            model_name=model_name,
+            enable_multi_agent=enable_multi_agent,
+            write_files=write_files,
+        )
+        self._send_json(scaffold_result_payload(spec, result))
+
+    def _scaffold_run(self, payload: dict) -> None:
+        prompt = str(payload.get("prompt", "")).strip()
+        model_name = str(payload.get("model") or DEFAULT_MODEL).strip()
+        enable_multi_agent = bool(payload.get("multi_agent", True))
+        if not prompt:
+            self._send_json({"error": "prompt 값이 비어 있습니다."}, HTTPStatus.BAD_REQUEST)
+            return
+        if model_name not in MODEL_OPTIONS:
+            self._send_json({"error": f"등록되지 않은 모델입니다: {model_name}"}, HTTPStatus.BAD_REQUEST)
+            return
+        spec, scaffold_result = scaffold_payload(
+            payload,
+            model_name=model_name,
+            enable_multi_agent=enable_multi_agent,
+            write_files=True,
+        )
+        files = build_context_files(payload, model_name=model_name, enable_multi_agent=enable_multi_agent)
+        files.update(scaffold_to_context_files(WORKSPACE_DIR, scaffold_result))
+        if spec.goal.get("title"):
+            files["/goals/current-goal.md"] = goal_to_markdown(
+                spec.goal,
+                model_name=model_name,
+                multi_agent=enable_multi_agent,
+            )
+        if spec.plan_steps:
+            files["/plans/current-plan.md"] = render_web_plan_markdown(
+                {"title": spec.plan_title, "steps": spec.plan_steps},
+                model_name=model_name,
+                enable_multi_agent=enable_multi_agent,
+            )
+        agent = self._get_agent(model_name, enable_multi_agent)
+        response = agent.invoke({"messages": [{"role": "user", "content": prompt}], "files": files})
+        result_text = format_agent_result(response)
+        wiki_path = save_wiki_record(
+            prompt=prompt,
+            result=result_text,
+            model_name=model_name,
+            enable_multi_agent=enable_multi_agent,
+            goal_title=str(spec.goal.get("title") or (payload.get("goal") or {}).get("title", "")),
+        )
+        payload_data = scaffold_result_payload(spec, scaffold_result)
+        payload_data.update({"result": result_text, "wiki_path": wiki_path})
+        self._send_json(payload_data)
+
+    def _experiment(self, payload: dict) -> None:
+        prompt = str(payload.get("prompt", "")).strip()
+        if not prompt:
+            self._send_json({"error": "prompt 값이 비어 있습니다."}, HTTPStatus.BAD_REQUEST)
+            return
+        selected = str(payload.get("models", "")).strip()
+        models = [item.strip() for item in selected.split(",") if item.strip()] if selected else MODEL_OPTIONS
+        unknown = [model for model in models if model not in MODEL_OPTIONS]
+        if unknown:
+            self._send_json({"error": f"등록되지 않은 모델입니다: {', '.join(unknown)}"}, HTTPStatus.BAD_REQUEST)
+            return
+        enable_multi_agent = bool(payload.get("multi_agent", True))
+        files = build_context_files(payload, model_name=models[0], enable_multi_agent=enable_multi_agent)
+        results = []
+        for model_name in models:
+            try:
+                agent = self._get_agent(model_name, enable_multi_agent)
+                response = agent.invoke({"messages": [{"role": "user", "content": prompt}], "files": files})
+                results.append({"model": model_name, "ok": True, "result": format_agent_result(response)})
+            except Exception as exc:
+                results.append({"model": model_name, "ok": False, "error": str(exc), "result": ""})
+        path = save_experiment(
+            "web-model-compare",
+            prompt,
+            results,
+            goal_title=str((payload.get("goal") or {}).get("title", "")),
+        )
+        summary = "\n".join(
+            [f"# 모델 비교 실험 저장: {path}", ""]
+            + [f"- {item['model']}: {'OK' if item.get('ok') else 'FAIL'}" for item in results]
+        )
+        self._send_json({"ok": True, "path": path.as_posix(), "summary": summary})
 
     def _save_plan(self, payload: dict) -> None:
         plan = payload.get("plan") if isinstance(payload.get("plan"), dict) else {}

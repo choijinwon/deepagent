@@ -20,6 +20,8 @@ deepagent/
 ├─ chat_cli.py
 ├─ doctor.py
 ├─ ops_common.py
+├─ ml_common.py
+├─ scaffold_common.py
 ├─ skills/
 │  ├─ security-report/
 │  ├─ access-audit/
@@ -176,6 +178,9 @@ PLAN_DIR=plans
 GOAL_DIR=goals
 SESSION_DIR=sessions
 MASK_SENSITIVE_LOGS=true
+MODEL_CATALOG_PATH=model_catalog.json
+EXPERIMENT_DIR=experiments
+SCAFFOLD_OVERWRITE=false
 ```
 
 `QWEN_BASE_URL`에 `/v1`이 붙는지 반드시 확인하세요.
@@ -301,6 +306,9 @@ PROMPT_STORE_PATH=prompt_templates.json
 기본 저장 폴더는 `wiki_logs/`입니다.
 웹 화면의 목표, 플랜, 첨부 파일 경로는 실행 시 에이전트 가상 파일 컨텍스트에 함께 전달됩니다.
 `목표 저장`, `플랜 저장` 버튼으로 CLI와 같은 `goals/`, `plans/` 폴더에 Markdown 기록을 남길 수 있습니다.
+`작업 생성기` 영역에 템플릿을 붙여넣으면 `agent_workspace/` 아래 폴더와 파일을 자동 생성하고, 목표와 플랜도 함께 저장할 수 있습니다.
+`생성 후 실행` 버튼은 자동 생성된 파일을 에이전트 컨텍스트에 첨부한 뒤 요청을 바로 실행합니다.
+`모델 카탈로그` 버튼은 `model_catalog.json`과 `model_catalog.md`를 생성하고, `모델 비교 실험` 버튼은 등록 모델별 응답을 `experiments/`에 저장합니다.
 
 ```text
 wiki_logs/
@@ -393,6 +401,13 @@ python chat_cli.py
 /session load <name>  저장된 세션 복구
 /sessions             저장된 세션 목록
 /doctor               폐쇄망 진단 실행
+/catalog              모델 카탈로그 생성/보기
+/experiment <models>  마지막 프롬프트를 여러 모델로 비교 실행
+/scaffold sample      붙여넣기 생성기 예시 보기
+/scaffold paste       붙여넣기로 폴더/파일/목표/플랜 자동 생성
+/scaffold file <path> 파일 내용으로 자동 생성
+/scaffold last        마지막 생성 결과 보기
+/scaffold attach      마지막 생성 파일을 에이전트 컨텍스트에 첨부
 /exit                 종료
 ```
 
@@ -406,12 +421,85 @@ CHAT_WORKSPACE_DIR=agent_workspace
 PLAN_DIR=plans
 GOAL_DIR=goals
 SESSION_DIR=sessions
+MODEL_CATALOG_PATH=model_catalog.json
+EXPERIMENT_DIR=experiments
+SCAFFOLD_OVERWRITE=false
 ```
 
 `/add-file`로 첨부한 파일은 DeepAgents 가상 파일 컨텍스트에 함께 전달됩니다.
 `/plan save`로 저장한 플랜은 Markdown 파일로 남습니다.
 `/goal save`로 저장한 목표도 Markdown 파일로 남고, 현재 목표는 다음 에이전트 호출에 `/goals/current-goal.md`로 자동 전달됩니다.
 `/session save`는 모델, 멀티에이전트 설정, 목표, 플랜, 첨부 파일 내용, 최근 대화를 JSON과 Markdown으로 저장합니다.
+
+붙여넣기로 작업 폴더와 파일을 자동 생성하려면 아래처럼 실행합니다.
+
+```text
+/scaffold paste
+```
+
+그 뒤 아래 형식의 내용을 붙여넣고 마지막 줄에 `.`을 입력합니다.
+
+````text
+# Goal
+폐쇄망 DeepAgents PoC 실행 환경 구성
+
+## Success Criteria
+- Windows 11에서 python chat_cli.py 실행
+- qwen3.5 모델 연결 테스트 성공
+- 실행 기록이 wiki_logs에 남는다
+
+## Constraints
+- 외부 인터넷 사용 금지
+- 외부 검색 Tool 사용 금지
+
+# Plan
+- .env 구성
+- python doctor.py 실행
+- python chat_cli.py 실행
+- 결과를 wiki_logs에 기록
+
+# Folders
+reports/security
+prompts
+runbooks/vllm
+
+# Files
+## reports/security/checklist.md
+```md
+# 보안 점검 체크리스트
+
+- [ ] 접근권한 확인
+- [ ] 로그 수집 확인
+- [ ] 취약점 조치 이력 확인
+```
+
+## prompts/access-audit.md
+```md
+서버 접근권한 보안 점검 TODO를 만들어줘.
+```
+````
+
+생성된 파일을 바로 에이전트 컨텍스트에 넣으려면 아래 명령을 실행합니다.
+
+```text
+/scaffold attach
+```
+
+마지막 프롬프트를 여러 모델로 비교하려면 먼저 일반 프롬프트를 한 번 실행한 뒤 아래처럼 실행합니다.
+
+```text
+/experiment qwen3.5,gpt20,gamma
+```
+
+결과는 `experiments/YYYY-MM-DD/` 아래 Markdown으로 저장됩니다.
+
+모델 카탈로그를 만들려면 아래 명령을 실행합니다.
+
+```text
+/catalog
+```
+
+`model_catalog.json`은 모델 설명, 컨텍스트 길이, Tool Calling 확인 상태, 권장 temperature, 사용 사례를 기록하는 오프라인 모델 장부입니다.
 
 ## 10. 폐쇄망 진단
 
@@ -483,5 +571,6 @@ curl http://xxx.xxx.xxx.xxx:포트/v1/models
 `.env` 파일은 민감 정보가 포함되므로 Git에 올리지 않습니다.
 `prompt_templates.json`은 사용자별 프롬프트 저장 파일이므로 Git에 올리지 않습니다.
 `wiki_logs/`는 실행 기록 폴더이므로 Git에 올리지 않습니다.
-`agent_workspace/`, `plans/`, `goals/`, `sessions/`는 사용자별 작업 파일, 플랜, 목표, 세션 저장 폴더이므로 Git에 올리지 않습니다.
+`agent_workspace/`, `plans/`, `goals/`, `sessions/`, `experiments/`는 사용자별 작업 파일, 플랜, 목표, 세션, 실험 저장 폴더이므로 Git에 올리지 않습니다.
+`model_catalog.json`과 `model_catalog.md`는 폐쇄망 환경별 모델 장부이므로 기본적으로 Git에 올리지 않습니다.
 `offline_packages/`는 용량이 크고 환경별 wheel이 섞일 수 있으므로 Git에 올리지 않습니다.

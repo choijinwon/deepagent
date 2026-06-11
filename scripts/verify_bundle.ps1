@@ -23,6 +23,8 @@ $RequiredProjectFiles = @(
     "chat_cli.py",
     "doctor.py",
     "ops_common.py",
+    "ml_common.py",
+    "scaffold_common.py",
     "requirements.txt",
     ".env.example",
     "scripts/install_offline.ps1",

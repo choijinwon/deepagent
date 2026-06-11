@@ -5,6 +5,11 @@ from datetime import datetime
 from pathlib import Path
 
 from doctor import run_doctor
+from ml_common import (
+    ensure_model_catalog,
+    save_experiment,
+    save_model_catalog_markdown,
+)
 from ops_common import (
     goal_dir,
     goal_to_markdown,
@@ -14,6 +19,13 @@ from ops_common import (
     save_goal_markdown,
     save_session,
     session_dir,
+)
+from scaffold_common import (
+    SCAFFOLD_SAMPLE,
+    apply_scaffold,
+    parse_scaffold_text,
+    render_scaffold_summary,
+    scaffold_to_context_files,
 )
 from app_closed import (
     build_agent,
@@ -68,6 +80,13 @@ Commands
   /session load <name>  Load a saved session
   /sessions             List saved sessions
   /doctor               Run closed-network diagnostics
+  /catalog              Create/show offline model catalog
+  /experiment <models>  Run last prompt across comma-separated models
+  /scaffold sample      Show paste scaffold sample
+  /scaffold paste       Create folders/files/goals/plans from pasted text
+  /scaffold file <path> Create scaffold from a workspace file
+  /scaffold last        Show last scaffold result
+  /scaffold attach      Attach last scaffold files to context
   /exit                 Quit
 
 Input
@@ -89,6 +108,8 @@ class ChatState:
     plan_title: str = ""
     plan_steps: list[dict[str, str]] = field(default_factory=list)
     goal: dict = field(default_factory=lambda: {"title": "", "criteria": [], "constraints": [], "notes": []})
+    last_scaffold_files: list[Path] = field(default_factory=list)
+    last_scaffold_summary: str = ""
 
 
 class ChatAgentCache:
@@ -537,6 +558,114 @@ def run_doctor_command() -> None:
         print(line)
 
 
+def show_catalog() -> None:
+    catalog, json_path = ensure_model_catalog(get_available_models())
+    md_path = save_model_catalog_markdown(catalog)
+    print(f"Model catalog JSON: {json_path}")
+    print(f"Model catalog Markdown: {md_path}")
+    print("")
+    for model, profile in sorted(catalog.get("models", {}).items()):
+        print(f"- {model}: tool_calling={profile.get('tool_calling')} context={profile.get('context_length')}")
+
+
+def handle_experiment_command(command_cache: ChatAgentCache, state: ChatState, args: str) -> None:
+    if not state.last_user_prompt:
+        print("No last user prompt. Send a prompt first, or /load a saved prompt.")
+        return
+    models = [item.strip() for item in args.split(",") if item.strip()] if args else get_available_models()
+    available = set(get_available_models())
+    unknown = [model for model in models if model not in available]
+    if unknown:
+        print(f"Unknown model(s): {', '.join(unknown)}")
+        print(f"Available: {', '.join(get_available_models())}")
+        return
+
+    previous_model = state.model_name
+    previous_messages = list(state.messages)
+    results = []
+    for model in models:
+        print(f"Running experiment model: {model}")
+        state.model_name = model
+        state.messages = []
+        try:
+            result = invoke_chat(command_cache, state, state.last_user_prompt)
+            results.append({"model": model, "ok": True, "result": result})
+        except Exception as exc:
+            results.append({"model": model, "ok": False, "error": str(exc), "result": ""})
+    state.model_name = previous_model
+    state.messages = previous_messages
+    path = save_experiment(
+        "model-compare",
+        state.last_user_prompt,
+        results,
+        goal_title=str(state.goal.get("title") or ""),
+    )
+    print(f"Experiment saved: {path}")
+
+
+def handle_scaffold_command(state: ChatState, args: str) -> None:
+    command, _, value = args.partition(" ")
+    command = command.lower().strip()
+    value = value.strip()
+
+    if command == "sample":
+        print(SCAFFOLD_SAMPLE)
+        return
+    if command == "last":
+        print(state.last_scaffold_summary or "No scaffold has been created yet.")
+        return
+    if command == "attach":
+        if not state.last_scaffold_files:
+            print("No scaffold files to attach.")
+            return
+        attached = 0
+        for path in state.last_scaffold_files:
+            if path.exists() and path.is_file():
+                virtual_path = as_virtual_path(state, path)
+                state.attached_files[virtual_path] = path.read_text(encoding="utf-8")
+                attached += 1
+        print(f"Attached scaffold files: {attached}")
+        return
+
+    if command == "paste":
+        text = read_paste()
+    elif command == "file":
+        if not value:
+            print("Usage: /scaffold file <path>")
+            return
+        try:
+            path = resolve_workspace_path(state, value)
+            text = path.read_text(encoding="utf-8")
+        except Exception as exc:
+            print(f"Scaffold file read failed: {exc}")
+            return
+    else:
+        print("Usage: /scaffold sample|paste|file <path>|last|attach")
+        return
+
+    try:
+        spec = parse_scaffold_text(text)
+        result = apply_scaffold(
+            spec,
+            state.workspace_dir,
+            plan_dir=state.plan_dir,
+            session_dir=session_dir(),
+            model_name=state.model_name,
+            enable_multi_agent=state.enable_multi_agent,
+        )
+    except Exception as exc:
+        print(f"Scaffold failed: {exc}")
+        return
+
+    state.goal = spec.goal if spec.goal.get("title") else state.goal
+    state.plan_title = spec.plan_title
+    state.plan_steps = [{"status": "todo", "text": step} for step in spec.plan_steps]
+    state.last_scaffold_files = list(result.created_files)
+    state.last_scaffold_summary = render_scaffold_summary(spec, result)
+    print(state.last_scaffold_summary)
+    print(f"Scaffold summary: {result.summary_path}")
+
+
 def handle_model_command(state: ChatState, args: str) -> None:
     models = get_available_models()
     if not args:
@@ -684,6 +813,12 @@ def handle_command(command: str, cache: ChatAgentCache, state: ChatState) -> boo
         list_sessions()
     elif name == "/doctor":
         run_doctor_command()
+    elif name == "/catalog":
+        show_catalog()
+    elif name == "/experiment":
+        handle_experiment_command(cache, state, args)
+    elif name == "/scaffold":
+        handle_scaffold_command(state, args)
     elif name == "/paste":
         prompt = read_paste()
         if prompt:
