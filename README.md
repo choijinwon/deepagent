@@ -22,6 +22,7 @@ deepagent/
 ├─ ops_common.py
 ├─ ml_common.py
 ├─ scaffold_common.py
+├─ scaffold_cli.py
 ├─ registration_common.py
 ├─ autofix_common.py
 ├─ ui_common.py
@@ -168,6 +169,7 @@ deepagent-console  # 메뉴형 콘솔 UI
 deepagent-web      # 웹 UI 실행
 deepagent-doctor   # 폐쇄망 환경 진단
 deepagent-run      # 기본 단발 실행 테스트
+deepagent-scaffold # 아이디어 붙여넣기로 폴더/파일 자동 생성
 ```
 
 ## 5. .env 생성
@@ -493,7 +495,38 @@ ML_PLATFORM_PYTHON_VERSION=3.11
 `/goal save`로 저장한 목표도 Markdown 파일로 남고, 현재 목표는 다음 에이전트 호출에 `/goals/current-goal.md`로 자동 전달됩니다.
 `/session save`는 모델, 멀티에이전트 설정, 목표, 플랜, 첨부 파일 내용, 최근 대화를 JSON과 Markdown으로 저장합니다.
 
-붙여넣기로 작업 폴더와 파일을 자동 생성하려면 아래처럼 실행합니다.
+## 10. 웹 없이 아이디어로 폴더/파일 자동 생성
+
+웹 UI를 열지 않고 터미널에서 바로 폴더와 파일을 만들려면 `deepagent-scaffold` 명령을 사용합니다.
+이 기능은 LLM 호출 없이 입력한 Markdown 형식의 아이디어를 파싱해서 `agent_workspace/`, `plans/`, `goals/`, `sessions/`에 산출물을 생성합니다.
+
+붙여넣기로 바로 생성:
+
+```powershell
+deepagent-scaffold paste
+```
+
+아이디어를 붙여넣고 마지막 줄에 `.`만 입력하면 실행됩니다.
+
+파일에서 읽어 생성:
+
+```powershell
+deepagent-scaffold file .\idea.md
+```
+
+실제 생성 전에 미리보기:
+
+```powershell
+deepagent-scaffold file .\idea.md --preview
+```
+
+예시 형식 보기:
+
+```powershell
+deepagent-scaffold sample
+```
+
+챗봇형 CLI 안에서도 같은 작업을 할 수 있습니다.
 
 ```text
 /scaffold paste
@@ -563,7 +596,7 @@ runbooks/vllm
 
 `model_catalog.json`은 모델 설명, 컨텍스트 길이, Tool Calling 확인 상태, 권장 temperature, 사용 사례를 기록하는 오프라인 모델 장부입니다.
 
-## 10. OpenCode IDE 기반 ML Platform 등록 자동화
+## 11. OpenCode IDE 기반 ML Platform 등록 자동화
 
 기존 ML 프로젝트를 분석해 하이닉스 ML Platform 등록에 필요한 초안 파일을 자동 생성합니다.
 1차 구현은 실제 플랫폼 API 호출 없이 오프라인 산출물 생성과 검증 중심입니다.
@@ -642,7 +675,7 @@ fix_reports/
 
 웹 UI에서는 `ML Platform 등록` 패널에 프로젝트 경로 또는 로그 파일 경로를 입력한 뒤 `등록 분석`, `등록 구조 생성`, `오류 로그 분석` 버튼을 사용합니다.
 
-## 11. 폐쇄망 진단
+## 12. 폐쇄망 진단
 
 Windows 11 폐쇄망 PC에서 설정 문제를 먼저 확인하려면 아래 명령을 실행합니다.
 
@@ -664,7 +697,7 @@ deepagent-doctor
 - `QWEN_BASE_URL`의 `/v1/models` 호출 확인
 - Tool Calling 설정 확인 안내
 
-## 12. 오프라인 번들 검증
+## 13. 오프라인 번들 검증
 
 외부 PC에서 `prepare_external_pc.ps1`을 실행하면 `offline_bundle/bundle_manifest.json`이 함께 생성됩니다.
 폐쇄망 PC로 복사한 뒤 아래 명령으로 필수 파일 누락 여부를 확인합니다.

@@ -25,6 +25,7 @@ $RequiredProjectFiles = @(
     "ops_common.py",
     "ml_common.py",
     "scaffold_common.py",
+    "scaffold_cli.py",
     "registration_common.py",
     "autofix_common.py",
     "ui_common.py",

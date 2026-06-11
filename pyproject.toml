@@ -17,6 +17,7 @@ deepagent-console = "console_ui:main"
 deepagent-web = "web_closed:main"
 deepagent-doctor = "doctor:main"
 deepagent-run = "app_closed:main"
+deepagent-scaffold = "scaffold_cli:main"
 
 [tool.setuptools]
 py-modules = [
@@ -28,6 +29,7 @@ py-modules = [
   "ml_common",
   "ops_common",
   "registration_common",
+  "scaffold_cli",
   "scaffold_common",
   "ui_common",
   "web_closed",

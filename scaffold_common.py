@@ -10,7 +10,7 @@ SCAFFOLD_SAMPLE = """# Goal
 폐쇄망 DeepAgents PoC 실행 환경 구성
 
 ## Success Criteria
-- Windows 11에서 python chat_cli.py 실행
+- Windows 11에서 deepagent 실행
 - qwen3.5 모델 연결 테스트 성공
 - 실행 기록이 wiki_logs에 남는다
 
@@ -20,8 +20,8 @@ SCAFFOLD_SAMPLE = """# Goal
 
 # Plan
 - .env 구성
-- python doctor.py 실행
-- python chat_cli.py 실행
+- deepagent-doctor 실행
+- deepagent 실행
 - 결과를 wiki_logs에 기록
 
 # Folders

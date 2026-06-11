@@ -37,6 +37,7 @@ Copy-Item -Force (Join-Path $Root "doctor.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "ops_common.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "ml_common.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "scaffold_common.py") $BundleProjectDir
+Copy-Item -Force (Join-Path $Root "scaffold_cli.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "registration_common.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "autofix_common.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "ui_common.py") $BundleProjectDir
