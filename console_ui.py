@@ -1,7 +1,9 @@
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
+from autofix_common import analyze_log_text, render_fix_report, save_fix_report
 from app_closed import (
     build_agent,
     get_available_models,
@@ -9,6 +11,21 @@ from app_closed import (
     get_harness_skill_files,
     get_harness_skill_names,
     harness_skills_enabled,
+)
+from dev_common import (
+    DevPatchCandidate,
+    DevSession,
+    apply_patch_candidates,
+    generate_patch_candidates,
+    list_dev_sessions,
+    load_dev_session,
+    render_dev_run_markdown,
+    render_patch_candidates,
+    run_development_command,
+    save_dev_run,
+    save_dev_session,
+    save_patch_candidates,
+    suggest_development_commands,
 )
 from ops_common import session_dir
 from project_wizard import run_project_wizard
@@ -27,6 +44,11 @@ class ConsoleState:
     prompt: str = DEFAULT_PROMPT
     workspace_dir: Path = Path("agent_workspace")
     plan_dir: Path = Path("plans")
+    last_dev_command: str = ""
+    last_dev_log_path: Path | None = None
+    last_dev_fix_path: Path | None = None
+    last_dev_patch_path: Path | None = None
+    last_dev_patch_candidates: list[DevPatchCandidate] = field(default_factory=list)
 
 
 class ConsoleAgentCache:
@@ -307,6 +329,149 @@ def run_scaffold_console(state: ConsoleState, *, preview: bool = False) -> None:
         print_status_line(f"요약 파일: {result.summary_path}", "green")
 
 
+def dev_session_name(command: str) -> str:
+    head = command.strip().split()[0] if command.strip() else "command"
+    return f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{head}"
+
+
+def save_console_dev_session(state: ConsoleState, *, status: str, exit_code: int | None = None) -> None:
+    if not state.last_dev_command:
+        return
+    save_dev_session(
+        DevSession(
+            name=dev_session_name(state.last_dev_command),
+            command=state.last_dev_command,
+            cwd=state.workspace_dir,
+            log_path=state.last_dev_log_path,
+            fix_path=state.last_dev_fix_path,
+            patch_path=state.last_dev_patch_path,
+            exit_code=exit_code,
+            status=status,
+        )
+    )
+
+
+def update_console_patch_candidates(state: ConsoleState, report: dict, source_name: str) -> None:
+    candidates = generate_patch_candidates(report, state.workspace_dir)
+    patch_path = save_patch_candidates(candidates, source_name)
+    state.last_dev_patch_candidates = candidates
+    state.last_dev_patch_path = patch_path
+
+
+def choose_dev_command(state: ConsoleState) -> str:
+    suggestions = suggest_development_commands(state.workspace_dir)
+    print("")
+    print("실행할 개발 명령")
+    if suggestions:
+        for index, item in enumerate(suggestions, start=1):
+            print(f"{index}. {item['label']}: {item['command']}")
+    print("0. 직접 입력")
+    selected = input("선택 번호: ").strip()
+    if selected == "0" or not selected:
+        return input("실행 명령: ").strip()
+    if not selected.isdigit():
+        print("숫자를 입력하세요.")
+        return ""
+    index = int(selected)
+    if index < 1 or index > len(suggestions):
+        print("범위를 벗어난 번호입니다.")
+        return ""
+    return suggestions[index - 1]["command"]
+
+
+def run_dev_console(state: ConsoleState, *, analyze_failure: bool = False) -> None:
+    command = choose_dev_command(state)
+    if not command:
+        return
+    print_status_line(f"[dev] 실행: {command}", "cyan")
+    result = run_development_command(command, state.workspace_dir)
+    log_path = save_dev_run(result)
+    state.last_dev_command = command
+    state.last_dev_log_path = log_path
+    print_markdown_result("Dev Run", render_dev_run_markdown(result), border_style="green" if result.exit_code == 0 else "red")
+    print_status_line(f"실행 로그 저장: {log_path}", "green" if result.exit_code == 0 else "yellow")
+
+    if analyze_failure or result.exit_code != 0:
+        report = analyze_log_text(render_dev_run_markdown(result), source_name=log_path.name)
+        fix_path = save_fix_report(report)
+        state.last_dev_fix_path = fix_path
+        update_console_patch_candidates(state, report, log_path.name)
+        print_markdown_result("Auto Fix Plan", render_fix_report(report), border_style="yellow")
+        print_markdown_result("Patch Candidates", render_patch_candidates(state.last_dev_patch_candidates), border_style="yellow")
+        print_status_line(f"수정 리포트 저장: {fix_path}", "green")
+        if state.last_dev_patch_path:
+            print_status_line(f"패치 후보 저장: {state.last_dev_patch_path}", "green")
+
+    save_console_dev_session(state, status="passed" if result.exit_code == 0 else "fix-plan", exit_code=result.exit_code)
+
+
+def apply_dev_patch_console(state: ConsoleState) -> None:
+    if not state.last_dev_patch_candidates:
+        print("적용할 패치 후보가 없습니다. 먼저 개발 실행/오류 분석을 실행하세요.")
+        return
+    print_markdown_result("Patch Candidates", render_patch_candidates(state.last_dev_patch_candidates), border_style="yellow")
+    answer = input("위 패치를 적용하려면 YES 입력: ").strip()
+    if answer != "YES":
+        print("패치 적용을 취소했습니다.")
+        return
+    try:
+        applied = apply_patch_candidates(state.last_dev_patch_candidates)
+    except Exception as exc:
+        print(f"패치 적용 실패: {exc}")
+        return
+    save_console_dev_session(state, status="patched")
+    print("적용된 파일")
+    for path in applied:
+        print(f"- {path}")
+
+
+def retest_dev_console(state: ConsoleState) -> None:
+    if not state.last_dev_command:
+        try:
+            session = load_dev_session("latest")
+        except FileNotFoundError:
+            print("재실행할 개발 명령이 없습니다.")
+            return
+        state.workspace_dir = session.cwd
+        state.last_dev_command = session.command
+    print_status_line(f"[dev] 재테스트: {state.last_dev_command}", "cyan")
+    result = run_development_command(state.last_dev_command, state.workspace_dir)
+    log_path = save_dev_run(result)
+    state.last_dev_log_path = log_path
+    print_markdown_result("Dev Retest", render_dev_run_markdown(result), border_style="green" if result.exit_code == 0 else "red")
+    save_console_dev_session(state, status="passed" if result.exit_code == 0 else "failed", exit_code=result.exit_code)
+
+
+def recover_dev_console(state: ConsoleState) -> None:
+    names = list_dev_sessions()
+    print("")
+    print("개발 세션")
+    print("0. latest")
+    for index, name in enumerate(names, start=1):
+        print(f"{index}. {name}")
+    selected = input("복구할 세션 번호: ").strip() or "0"
+    if selected == "0":
+        name = "latest"
+    elif selected.isdigit() and 1 <= int(selected) <= len(names):
+        name = names[int(selected) - 1]
+    else:
+        print("범위를 벗어난 번호입니다.")
+        return
+    try:
+        session = load_dev_session(name)
+    except FileNotFoundError as exc:
+        print(f"개발 세션을 찾지 못했습니다: {exc}")
+        return
+    state.workspace_dir = session.cwd
+    state.last_dev_command = session.command
+    state.last_dev_log_path = session.log_path
+    state.last_dev_fix_path = session.fix_path
+    state.last_dev_patch_path = session.patch_path
+    print(f"복구 완료: {session.name}")
+    print(f"작업 폴더: {state.workspace_dir}")
+    print(f"최근 명령: {state.last_dev_command}")
+
+
 def wait_enter() -> None:
     input("\n계속하려면 Enter를 누르세요.")
 
@@ -336,6 +501,10 @@ def main() -> None:
         print("12. 질문형 프로젝트 미리보기")
         print("13. 아이디어 붙여넣기로 폴더/파일 생성")
         print("14. 아이디어 생성 미리보기")
+        print("15. 생성 코드 실행/오류 자동 분석")
+        print("16. 수정 후보 패치 승인 적용")
+        print("17. 테스트 재실행")
+        print("18. 개발 세션 복구")
         print("0. 종료")
 
         choice = input("\n선택: ").strip()
@@ -380,6 +549,18 @@ def main() -> None:
             wait_enter()
         elif choice == "14":
             run_scaffold_console(state, preview=True)
+            wait_enter()
+        elif choice == "15":
+            run_dev_console(state, analyze_failure=True)
+            wait_enter()
+        elif choice == "16":
+            apply_dev_patch_console(state)
+            wait_enter()
+        elif choice == "17":
+            retest_dev_console(state)
+            wait_enter()
+        elif choice == "18":
+            recover_dev_console(state)
             wait_enter()
         elif choice == "0":
             print("종료합니다.")

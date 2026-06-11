@@ -4,7 +4,21 @@ from datetime import datetime
 from pathlib import Path
 
 from autofix_common import analyze_log_file, analyze_log_text, render_fix_report, save_fix_report
-from dev_common import render_dev_run_markdown, run_development_command, save_dev_run
+from dev_common import (
+    DevPatchCandidate,
+    DevSession,
+    apply_patch_candidates,
+    generate_patch_candidates,
+    list_dev_sessions,
+    load_dev_session,
+    render_dev_run_markdown,
+    render_patch_candidates,
+    run_development_command,
+    save_dev_run,
+    save_dev_session,
+    save_patch_candidates,
+    suggest_development_commands,
+)
 from doctor import run_doctor
 from ml_common import (
     ensure_model_catalog,
@@ -97,8 +111,13 @@ Commands
   /project preview      Ask questions and preview project scaffold
   /doctor               Run closed-network diagnostics
   /dev run <cmd>        Run a development command and save its log
+  /dev auto             Auto-select a local validation command and run it
   /dev fix <cmd>        Run command, analyze failure, ask agent for fixes
   /dev fix-log <path>   Analyze an existing dev/job log
+  /dev apply            Apply generated patch candidates after approval
+  /dev retest           Re-run last development command
+  /dev recover [name]   Recover latest or named development session
+  /dev sessions         List saved development sessions
   /dev attach           Attach last dev log and fix report
   /dev last             Show last dev run paths
   /catalog              Create/show offline model catalog
@@ -137,6 +156,9 @@ class ChatState:
     last_scaffold_summary: str = ""
     last_dev_log_path: Path | None = None
     last_dev_fix_path: Path | None = None
+    last_dev_patch_path: Path | None = None
+    last_dev_command: str = ""
+    last_dev_patch_candidates: list[DevPatchCandidate] = field(default_factory=list)
 
 
 class ChatAgentCache:
@@ -820,7 +842,39 @@ def attach_dev_artifacts(state: ChatState) -> int:
     if state.last_dev_fix_path and state.last_dev_fix_path.exists():
         state.attached_files["/dev/last-fix-plan.md"] = state.last_dev_fix_path.read_text(encoding="utf-8")
         attached += 1
+    if state.last_dev_patch_path and state.last_dev_patch_path.exists():
+        state.attached_files["/dev/last-patch-candidates.md"] = state.last_dev_patch_path.read_text(encoding="utf-8")
+        attached += 1
     return attached
+
+
+def save_current_dev_session(state: ChatState, *, status: str, exit_code: int | None = None) -> None:
+    command = state.last_dev_command or "dev-command"
+    session = DevSession(
+        name=slug_dev_session_name(command),
+        command=command,
+        cwd=state.workspace_dir,
+        log_path=state.last_dev_log_path,
+        fix_path=state.last_dev_fix_path,
+        patch_path=state.last_dev_patch_path,
+        exit_code=exit_code,
+        status=status,
+    )
+    save_dev_session(session)
+
+
+def slug_dev_session_name(command: str) -> str:
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    short = command.strip().split()[0] if command.strip() else "command"
+    return f"{stamp}-{short}"
+
+
+def update_patch_candidates(state: ChatState, report: dict, source_name: str) -> None:
+    candidates = generate_patch_candidates(report, state.workspace_dir)
+    patch_path = save_patch_candidates(candidates, source_name)
+    state.last_dev_patch_candidates = candidates
+    state.last_dev_patch_path = patch_path
+    state.attached_files["/dev/last-patch-candidates.md"] = patch_path.read_text(encoding="utf-8")
 
 
 def build_dev_fix_prompt(command: str, log_path: Path, fix_path: Path, exit_code: int) -> str:
@@ -859,8 +913,13 @@ def handle_dev_command(cache: ChatAgentCache, state: ChatState, args: str) -> No
                     "Usage:",
                     "  /folder <path>          Set development workspace first, for example `/folder .`",
                     "  /dev run <command>      Run command and save dev log",
+                    "  /dev auto               Pick a validation command and run it",
                     "  /dev fix <command>      Run command, analyze errors, ask agent for fix",
                     "  /dev fix-log <path>     Analyze existing log and attach fix report",
+                    "  /dev apply              Apply patch candidates after approval",
+                    "  /dev retest             Re-run the last dev command",
+                    "  /dev recover [name]     Recover latest or named dev session",
+                    "  /dev sessions           List saved dev sessions",
                     "  /dev attach             Attach last dev log/fix report",
                     "  /dev last               Show last dev paths",
                 ]
@@ -869,14 +928,51 @@ def handle_dev_command(cache: ChatAgentCache, state: ChatState, args: str) -> No
         return
 
     if command == "last":
+        print(f"Last command : {state.last_dev_command or 'none'}")
         print(f"Last dev log : {state.last_dev_log_path or 'none'}")
         print(f"Last fix plan: {state.last_dev_fix_path or 'none'}")
+        print(f"Last patches : {state.last_dev_patch_path or 'none'}")
+        return
+
+    if command == "sessions":
+        names = list_dev_sessions()
+        if not names:
+            print("No saved dev sessions.")
+            return
+        for name in names:
+            print(f"- {name}")
+        return
+
+    if command == "recover":
+        try:
+            session = load_dev_session(value or "latest")
+        except FileNotFoundError as exc:
+            print(f"Dev session not found: {exc}")
+            return
+        state.workspace_dir = session.cwd
+        state.last_dev_command = session.command
+        state.last_dev_log_path = session.log_path
+        state.last_dev_fix_path = session.fix_path
+        state.last_dev_patch_path = session.patch_path
+        attach_dev_artifacts(state)
+        print(f"Recovered dev session: {session.name}")
+        print(f"Workspace: {state.workspace_dir}")
+        print(f"Command: {state.last_dev_command}")
         return
 
     if command == "attach":
         attached = attach_dev_artifacts(state)
         print(f"Attached dev artifacts: {attached}")
         return
+
+    if command == "auto":
+        suggestions = suggest_development_commands(state.workspace_dir)
+        if not suggestions:
+            print("No auto validation command found. Use /dev run <command>.")
+            return
+        value = suggestions[0]["command"]
+        print(f"Auto command: {suggestions[0]['label']} -> {value}")
+        command = "run"
 
     if command == "run":
         if not value:
@@ -885,7 +981,9 @@ def handle_dev_command(cache: ChatAgentCache, state: ChatState, args: str) -> No
         print_status_line(f"[dev] 실행: {value}")
         result = run_development_command(value, state.workspace_dir)
         log_path = save_dev_run(result)
+        state.last_dev_command = value
         state.last_dev_log_path = log_path
+        save_current_dev_session(state, status="passed" if result.exit_code == 0 else "failed", exit_code=result.exit_code)
         print_markdown_result("Dev Run", render_dev_run_markdown(result), border_style="green" if result.exit_code == 0 else "red")
         print_status_line(f"Dev log saved: {log_path}", "green" if result.exit_code == 0 else "yellow")
         return
@@ -897,13 +995,57 @@ def handle_dev_command(cache: ChatAgentCache, state: ChatState, args: str) -> No
         try:
             report = analyze_log_file(value)
             fix_path = save_fix_report(report)
+            update_patch_candidates(state, report, Path(value).name)
         except Exception as exc:
             print(f"Dev fix-log failed: {exc}")
             return
         state.last_dev_fix_path = fix_path
         state.attached_files["/dev/last-fix-plan.md"] = fix_path.read_text(encoding="utf-8")
         print_markdown_result("Dev Auto Fix", render_fix_report(report), border_style="yellow")
+        print_markdown_result("Patch Candidates", render_patch_candidates(state.last_dev_patch_candidates), border_style="yellow")
+        save_current_dev_session(state, status="fix-plan")
         print_status_line(f"Fix report saved and attached: {fix_path}", "green")
+        return
+
+    if command == "retest":
+        if not state.last_dev_command:
+            try:
+                session = load_dev_session("latest")
+                state.workspace_dir = session.cwd
+                state.last_dev_command = session.command
+            except FileNotFoundError:
+                print("No previous dev command. Use /dev run <command> first.")
+                return
+        value = state.last_dev_command
+        command = "run"
+        print_status_line(f"[dev] 재테스트: {value}")
+        result = run_development_command(value, state.workspace_dir)
+        log_path = save_dev_run(result)
+        state.last_dev_log_path = log_path
+        save_current_dev_session(state, status="passed" if result.exit_code == 0 else "failed", exit_code=result.exit_code)
+        print_markdown_result("Dev Retest", render_dev_run_markdown(result), border_style="green" if result.exit_code == 0 else "red")
+        return
+
+    if command == "apply":
+        if not state.last_dev_patch_candidates:
+            print("No in-memory patch candidates. Run /dev fix <command> or /dev fix-log <path> first.")
+            return
+        print_markdown_result("Patch Candidates", render_patch_candidates(state.last_dev_patch_candidates), border_style="yellow")
+        answer = input("위 패치 후보를 적용할까요? 적용하려면 YES 입력: ").strip()
+        if answer != "YES":
+            print("Patch apply cancelled.")
+            return
+        try:
+            applied = apply_patch_candidates(state.last_dev_patch_candidates)
+        except Exception as exc:
+            print(f"Patch apply failed: {exc}")
+            return
+        save_current_dev_session(state, status="patched")
+        print("Applied files:")
+        for path in applied:
+            print(f"- {path}")
+        if state.last_dev_command:
+            print("Next: /dev retest")
         return
 
     if command == "fix":
@@ -913,13 +1055,17 @@ def handle_dev_command(cache: ChatAgentCache, state: ChatState, args: str) -> No
         print_status_line(f"[dev] 실행 후 자동 분석: {value}")
         result = run_development_command(value, state.workspace_dir)
         log_path = save_dev_run(result)
+        state.last_dev_command = value
         state.last_dev_log_path = log_path
         report = analyze_log_text(render_dev_run_markdown(result), source_name=log_path.name)
         fix_path = save_fix_report(report)
         state.last_dev_fix_path = fix_path
+        update_patch_candidates(state, report, log_path.name)
         attach_dev_artifacts(state)
         print_markdown_result("Dev Run", render_dev_run_markdown(result), border_style="green" if result.exit_code == 0 else "red")
         print_markdown_result("Dev Auto Fix", render_fix_report(report), border_style="yellow")
+        print_markdown_result("Patch Candidates", render_patch_candidates(state.last_dev_patch_candidates), border_style="yellow")
+        save_current_dev_session(state, status="passed" if result.exit_code == 0 else "fix-plan", exit_code=result.exit_code)
         if result.exit_code == 0:
             print_status_line("명령이 성공했습니다. 로그와 리포트는 저장했지만 수정 요청은 생략합니다.", "green")
             return
@@ -927,7 +1073,7 @@ def handle_dev_command(cache: ChatAgentCache, state: ChatState, args: str) -> No
         run_chat_interactive(cache, state, prompt)
         return
 
-    print("Usage: /dev run|fix|fix-log|attach|last")
+    print("Usage: /dev auto|run|fix|fix-log|apply|retest|recover|sessions|attach|last")
 
 
 def handle_model_command(state: ChatState, args: str) -> None:

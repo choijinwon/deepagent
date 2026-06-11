@@ -22,6 +22,8 @@ plans/
 goals/
 sessions/
 dev_runs/
+dev_sessions/
+dev_patches/
 experiments/
 model_catalog.json
 model_catalog.md

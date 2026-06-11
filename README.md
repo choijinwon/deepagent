@@ -219,6 +219,8 @@ PLAN_DIR=plans
 GOAL_DIR=goals
 SESSION_DIR=sessions
 DEV_RUN_DIR=dev_runs
+DEV_SESSION_DIR=dev_sessions
+DEV_PATCH_DIR=dev_patches
 DEV_COMMAND_TIMEOUT=120
 MASK_SENSITIVE_LOGS=true
 MODEL_CATALOG_PATH=model_catalog.json
@@ -410,6 +412,7 @@ deepagent-console
 - 실행 결과를 vLLM 위키 Markdown으로 자동 기록
 - 질문형 프로젝트 생성/미리보기
 - 아이디어 붙여넣기 기반 폴더/파일 생성/미리보기
+- 생성 코드 실행, 오류 자동 분석, 패치 후보 승인 적용, 테스트 재실행
 
 콘솔 UI는 무료 오픈소스 `rich` 라이브러리를 사용해 Markdown, 표, 패널, 코드블록을 보기 좋게 표시합니다.
 `rich` wheel은 `requirements.txt`에 포함되어 외부 PC의 `prepare_external_pc.ps1` 실행 시 `offline_packages/`에 함께 다운로드됩니다.
@@ -475,8 +478,13 @@ deepagent-chat
 /project preview      질문에 답하고 생성 전 미리보기
 /doctor               폐쇄망 진단 실행
 /dev run <cmd>        개발 명령 실행 후 로그 저장
+/dev auto             현재 폴더에서 검증 명령 자동 선택 후 실행
 /dev fix <cmd>        명령 실행, 오류 분석, 수정안 요청
 /dev fix-log <path>   기존 로그 파일 Auto Fix 분석
+/dev apply            생성된 패치 후보를 사용자 승인 후 적용
+/dev retest           마지막 개발 명령 재실행
+/dev recover [name]   최신 또는 지정 개발 세션 복구
+/dev sessions         저장된 개발 세션 목록 보기
 /dev attach           마지막 개발 로그/수정 리포트 첨부
 /dev last             마지막 개발 로그/수정 리포트 경로 보기
 /catalog              모델 카탈로그 생성/보기
@@ -505,15 +513,33 @@ CLI도 `rich`가 설치되어 있으면 답변을 Markdown 패널로 렌더링�
 
 ```text
 /dev run python -m py_compile app.py
+/dev auto
 /dev fix python -m pytest
 /dev fix-log .\logs\job-error.log
+/dev apply
+/dev retest
+/dev recover latest
 /dev attach
 /dev last
 ```
 
 `/dev fix <명령>`은 명령을 실행하고 로그를 저장한 뒤 Auto Fix 리포트를 생성합니다.
 명령이 실패하면 `/dev/last-run.md`와 `/dev/last-fix-plan.md`를 자동 첨부하고 에이전트에게 원인, 수정 대상 파일, 검증 명령을 요청합니다.
-원본 파일 자동 덮어쓰기는 하지 않으며, 제안 내용을 확인한 뒤 `/read`, `/write` 명령으로 적용할 수 있습니다.
+패치 후보는 `/dev/last-patch-candidates.md`로 함께 저장되며, 사용자가 `/dev apply`에서 `YES`를 입력해야 실제 파일에 적용됩니다.
+적용 후에는 `/dev retest`로 같은 명령을 다시 실행할 수 있고, `/dev recover latest`로 마지막 개발 세션을 복구할 수 있습니다.
+
+자동 패치 1차 범위는 안전하게 제한되어 있습니다.
+예를 들어 `ModuleNotFoundError`는 `requirements.txt` 또는 `requirements.lock.txt`에 누락 패키지를 추가하는 패치 후보를 생성합니다.
+경로 오류, GPU 메모리 부족, MLFlow 설정 오류처럼 자동 수정이 위험한 항목은 수정 계획과 점검 항목을 Markdown으로 남깁니다.
+
+메뉴형 콘솔에서는 `deepagent-console` 실행 후 아래 번호를 사용합니다.
+
+```text
+15. 생성 코드 실행/오류 자동 분석
+16. 수정 후보 패치 승인 적용
+17. 테스트 재실행
+18. 개발 세션 복구
+```
 
 ### 질문형 프로젝트 생성
 
@@ -554,6 +580,8 @@ PLAN_DIR=plans
 GOAL_DIR=goals
 SESSION_DIR=sessions
 DEV_RUN_DIR=dev_runs
+DEV_SESSION_DIR=dev_sessions
+DEV_PATCH_DIR=dev_patches
 DEV_COMMAND_TIMEOUT=120
 MODEL_CATALOG_PATH=model_catalog.json
 EXPERIMENT_DIR=experiments
