@@ -29,6 +29,7 @@ from dev_common import (
 )
 from ops_common import session_dir
 from project_wizard import run_project_wizard
+from registration_wizard import run_registration_wizard
 from scaffold_common import apply_scaffold, parse_scaffold_text, render_scaffold_summary
 from web_closed import invoke_agent_text, load_prompt_store, save_prompt_store, save_wiki_record
 from ui_common import MarkdownStream, print_key_value_table, print_markdown_result, print_status_line
@@ -472,6 +473,16 @@ def recover_dev_console(state: ConsoleState) -> None:
     print(f"최근 명령: {state.last_dev_command}")
 
 
+def run_registration_wizard_console() -> None:
+    try:
+        profile, _, summary = run_registration_wizard(write_files=True, create_package=True)
+    except Exception as exc:
+        print(f"등록 위자드 실패: {exc}")
+        return
+    print_markdown_result("ML Platform 등록 위자드", summary, border_style="cyan")
+    print_status_line(f"등록 위자드 완료: {profile.get('project_name')}", "green")
+
+
 def wait_enter() -> None:
     input("\n계속하려면 Enter를 누르세요.")
 
@@ -505,6 +516,7 @@ def main() -> None:
         print("16. 수정 후보 패치 승인 적용")
         print("17. 테스트 재실행")
         print("18. 개발 세션 복구")
+        print("19. ML Platform 등록 위자드")
         print("0. 종료")
 
         choice = input("\n선택: ").strip()
@@ -561,6 +573,9 @@ def main() -> None:
             wait_enter()
         elif choice == "18":
             recover_dev_console(state)
+            wait_enter()
+        elif choice == "19":
+            run_registration_wizard_console()
             wait_enter()
         elif choice == "0":
             print("종료합니다.")

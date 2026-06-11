@@ -30,6 +30,7 @@ $RequiredProjectFiles = @(
     "scaffold_common.py",
     "scaffold_cli.py",
     "registration_common.py",
+    "registration_wizard.py",
     "autofix_common.py",
     "ui_common.py",
     "requirements.txt",

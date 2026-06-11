@@ -27,6 +27,7 @@ deepagent/
 ├─ scaffold_common.py
 ├─ scaffold_cli.py
 ├─ registration_common.py
+├─ registration_wizard.py
 ├─ autofix_common.py
 ├─ ui_common.py
 ├─ skills/
@@ -170,6 +171,7 @@ deepagents         # 선택 메뉴 런처 별칭
 deepagent-menu     # 선택 메뉴 런처 별칭
 deepagent-chat     # 챗봇형 CLI 직접 실행
 deepagent-project  # 질문형 프로젝트 생성 마법사
+deepagent-register-wizard # ML Platform 등록 위자드
 deepagent-console  # 메뉴형 콘솔 UI
 deepagent-web      # 웹 UI 실행
 deepagent-doctor   # 폐쇄망 환경 진단
@@ -186,8 +188,9 @@ deepagent-scaffold # 아이디어 붙여넣기로 폴더/파일 자동 생성
 3. 웹 UI
 4. 메뉴형 콘솔 UI
 5. 아이디어로 폴더/파일 생성
-6. 폐쇄망 환경 진단
-7. 기본 단발 실행 테스트
+6. ML Platform 등록 위자드
+7. 폐쇄망 환경 진단
+8. 기본 단발 실행 테스트
 ```
 
 ## 5. .env 생성
@@ -414,6 +417,7 @@ deepagent-console
 - 질문형 프로젝트 생성/미리보기
 - 아이디어 붙여넣기 기반 폴더/파일 생성/미리보기
 - 생성 코드 실행, 오류 자동 분석, 패치 후보 승인 적용, 테스트 재실행
+- ML Platform 등록 위자드
 
 콘솔 UI는 무료 오픈소스 `rich` 라이브러리를 사용해 Markdown, 표, 패널, 코드블록을 보기 좋게 표시합니다.
 `rich` wheel은 `requirements.txt`에 포함되어 외부 PC의 `prepare_external_pc.ps1` 실행 시 `offline_packages/`에 함께 다운로드됩니다.
@@ -499,6 +503,7 @@ deepagent-chat
 /register scaffold <path> ML Platform 등록 표준 구조 생성
 /register report <path> 등록 프로필과 보고서 저장
 /register package <path> 등록 산출물 zip 패키지 생성
+/register wizard      질문형 ML Platform 등록 위자드 실행
 /register fix-log <path> Job 오류 로그 분석 및 수정안 생성
 /exit                 종료
 ```
@@ -715,6 +720,33 @@ runbooks/vllm
 
 ```text
 /register scan C:\work\my-model
+```
+
+주니어 개발자가 매뉴얼을 보지 않고 질문에 답하면서 진행하려면 위자드를 실행합니다.
+
+```powershell
+deepagent-register-wizard
+```
+
+챗봇형 CLI 안에서는 아래 명령을 사용합니다.
+
+```text
+/register wizard
+```
+
+위자드는 아래 항목을 차례대로 확인합니다.
+
+```text
+1. 프로젝트 폴더
+2. 자동 분석 결과와 등록 준비 점수
+3. 학습 진입점
+4. MLFlow Tracking URI
+5. Experiment 이름
+6. Platform Queue
+7. 실행 Arguments
+8. CPU/GPU/Memory
+9. Platform Image
+10. 등록 workspace와 zip 패키지 생성
 ```
 
 분석 항목:

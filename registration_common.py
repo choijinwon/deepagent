@@ -520,6 +520,19 @@ def scan_project(project_path: str) -> dict[str, Any]:
     return profile
 
 
+def refresh_registration_readiness(profile: dict[str, Any]) -> dict[str, Any]:
+    project_root = safe_project_path(str(profile.get("project_path", "")))
+    files = iter_project_files(project_root)
+    profile["warnings"] = build_warnings(
+        str(profile.get("default_entrypoint") or ""),
+        list(profile.get("requirements") or []),
+        list(profile.get("frameworks") or []),
+        dict(profile.get("environment_files") or {}),
+    )
+    profile["readiness"] = build_registration_readiness(project_root, files, profile)
+    return profile
+
+
 def build_warnings(
     default_entrypoint: str,
     requirements: list[str],
@@ -692,7 +705,7 @@ def render_job_template(profile: dict[str, Any]) -> str:
             f"framework: \"{profile.get('primary_framework', 'legacy-script')}\"",
             f"template_hint: \"{template_name}\"",
             f"queue: \"{job.get('queue', '')}\"",
-            "image: \"\"",
+            f"image: \"{job.get('image', '')}\"",
             "command: \"python entrypoint.py\"",
             f"args: \"{job.get('arguments', '')}\"",
             "resources:",
@@ -779,10 +792,10 @@ def render_registered_readme(profile: dict[str, Any]) -> str:
     )
 
 
-def scaffold_registered_workspace(project_path: str) -> dict[str, Any]:
-    profile = scan_project(project_path)
+def scaffold_registered_workspace_from_profile(profile: dict[str, Any]) -> dict[str, Any]:
+    profile = refresh_registration_readiness(profile)
     save_registration_profile(profile)
-    project_root = safe_project_path(project_path)
+    project_root = safe_project_path(profile["project_path"])
     target_dir = registered_workspace_dir() / slugify(profile["project_name"], "project")
     target_dir.mkdir(parents=True, exist_ok=True)
     (target_dir / "README.md").write_text(render_registered_readme(profile), encoding="utf-8")
@@ -792,6 +805,10 @@ def scaffold_registered_workspace(project_path: str) -> dict[str, Any]:
     (target_dir / "run_train.ps1").write_text(render_run_train(profile), encoding="utf-8")
     write_requirements_lock(project_root, profile, target_dir)
     return {"profile": profile, "workspace": target_dir.as_posix(), "files": sorted(path.name for path in target_dir.iterdir())}
+
+
+def scaffold_registered_workspace(project_path: str) -> dict[str, Any]:
+    return scaffold_registered_workspace_from_profile(scan_project(project_path))
 
 
 def write_requirements_lock(project_root: Path, profile: dict[str, Any], target_dir: Path) -> None:
@@ -807,8 +824,8 @@ def write_requirements_lock(project_root: Path, profile: dict[str, Any], target_
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def create_registration_package(project_path: str) -> dict[str, Any]:
-    scaffold = scaffold_registered_workspace(project_path)
+def create_registration_package_from_profile(profile: dict[str, Any]) -> dict[str, Any]:
+    scaffold = scaffold_registered_workspace_from_profile(profile)
     profile = scaffold["profile"]
     project_slug = slugify(profile["project_name"], "project")
     profile_dir = registration_dir() / project_slug
@@ -846,3 +863,7 @@ def create_registration_package(project_path: str) -> dict[str, Any]:
         "files": manifest["files"],
         "readiness": profile.get("readiness", {}),
     }
+
+
+def create_registration_package(project_path: str) -> dict[str, Any]:
+    return create_registration_package_from_profile(scan_project(project_path))

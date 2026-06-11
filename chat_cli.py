@@ -43,6 +43,7 @@ from registration_common import (
     scan_project,
     scaffold_registered_workspace,
 )
+from registration_wizard import run_registration_wizard
 from scaffold_common import (
     SCAFFOLD_SAMPLE,
     apply_scaffold,
@@ -132,6 +133,7 @@ Commands
   /register scaffold <p> Generate standard registration workspace
   /register report <p> Save registration profile and report
   /register package <p> Create a zip package for platform handoff
+  /register wizard      Ask questions and create registration artifacts
   /register fix-log <p> Analyze job log and create fix plan
   /exit                 Quit
 
@@ -785,6 +787,15 @@ def handle_register_command(state: ChatState, args: str) -> None:
     command = command.lower().strip()
     value = value.strip()
 
+    if command == "wizard":
+        try:
+            _, _, summary = run_registration_wizard(write_files=True, create_package=True)
+        except Exception as exc:
+            print(f"Registration wizard failed: {exc}")
+            return
+        print_markdown_result("Registration Wizard", summary, border_style="cyan")
+        return
+
     if command == "scan":
         if not value:
             print("Usage: /register scan <project-path>")
@@ -845,7 +856,7 @@ def handle_register_command(state: ChatState, args: str) -> None:
         print(render_fix_report(report))
         print(f"Fix report saved: {path}")
     else:
-        print("Usage: /register scan|scaffold|report|package|fix-log <path>")
+        print("Usage: /register scan|scaffold|report|package|wizard|fix-log <path>")
 
 
 def attach_dev_artifacts(state: ChatState) -> int:
