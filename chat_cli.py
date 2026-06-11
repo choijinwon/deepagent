@@ -21,6 +21,7 @@ from ops_common import (
     save_session,
     session_dir,
 )
+from project_wizard import run_project_wizard
 from registration_common import (
     render_registration_report,
     save_registration_profile,
@@ -92,6 +93,8 @@ Commands
   /session save <name>  Save session as JSON and Markdown
   /session load <name>  Load a saved session
   /sessions             List saved sessions
+  /project new          Ask questions and create a project scaffold
+  /project preview      Ask questions and preview project scaffold
   /doctor               Run closed-network diagnostics
   /dev run <cmd>        Run a development command and save its log
   /dev fix <cmd>        Run command, analyze failure, ask agent for fixes
@@ -724,6 +727,35 @@ def handle_scaffold_command(state: ChatState, args: str) -> None:
     print(f"Scaffold summary: {result.summary_path}")
 
 
+def handle_project_command(state: ChatState, args: str) -> None:
+    command = args.strip().lower() or "new"
+    if command not in ("new", "preview"):
+        print("Usage: /project new|preview")
+        return
+    try:
+        spec, scaffold_spec, result, summary = run_project_wizard(
+            workspace_dir=state.workspace_dir,
+            plan_dir=state.plan_dir,
+            session_path=session_dir(),
+            model_name=state.model_name,
+            enable_multi_agent=state.enable_multi_agent,
+            write_files=command == "new",
+        )
+    except Exception as exc:
+        print(f"Project wizard failed: {exc}")
+        return
+
+    print_markdown_result("Project Preview" if command == "preview" else "Project Created", summary, border_style="cyan")
+    if command == "new":
+        state.goal = scaffold_spec.goal if scaffold_spec.goal.get("title") else state.goal
+        state.plan_title = scaffold_spec.plan_title
+        state.plan_steps = [{"status": "todo", "text": step} for step in scaffold_spec.plan_steps]
+        state.last_scaffold_files = list(result.created_files)
+        state.last_scaffold_summary = summary
+        print_status_line(f"프로젝트 생성 완료: {spec.name}", "green")
+        print_status_line("생성 파일을 에이전트 컨텍스트에 넣으려면 `/scaffold attach`를 실행하세요.", "cyan")
+
+
 def handle_register_command(state: ChatState, args: str) -> None:
     command, _, value = args.partition(" ")
     command = command.lower().strip()
@@ -1043,6 +1075,8 @@ def handle_command(command: str, cache: ChatAgentCache, state: ChatState) -> boo
         handle_session_command(state, args)
     elif name == "/sessions":
         list_sessions()
+    elif name == "/project":
+        handle_project_command(state, args)
     elif name == "/doctor":
         run_doctor_command()
     elif name == "/dev":

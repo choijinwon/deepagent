@@ -7,11 +7,12 @@ from ui_common import print_markdown_result, print_status_line, rich_enabled
 
 MENU = [
     ("1", "chat", "챗봇형 CLI", "deepagent-chat", "chat_cli"),
-    ("2", "web", "웹 UI", "deepagent-web", "web_closed"),
-    ("3", "console", "메뉴형 콘솔 UI", "deepagent-console", "console_ui"),
-    ("4", "scaffold", "아이디어로 폴더/파일 생성", "deepagent-scaffold", "scaffold_cli"),
-    ("5", "doctor", "폐쇄망 환경 진단", "deepagent-doctor", "doctor"),
-    ("6", "run", "기본 단발 실행 테스트", "deepagent-run", "app_closed"),
+    ("2", "project", "질문형 프로젝트 생성", "deepagent-project", "project_wizard"),
+    ("3", "web", "웹 UI", "deepagent-web", "web_closed"),
+    ("4", "console", "메뉴형 콘솔 UI", "deepagent-console", "console_ui"),
+    ("5", "scaffold", "아이디어로 폴더/파일 생성", "deepagent-scaffold", "scaffold_cli"),
+    ("6", "doctor", "폐쇄망 환경 진단", "deepagent-doctor", "doctor"),
+    ("7", "run", "기본 단발 실행 테스트", "deepagent-run", "app_closed"),
 ]
 
 
@@ -57,6 +58,8 @@ def dispatch(module_name: str) -> None:
         from web_closed import main
     elif module_name == "console_ui":
         from console_ui import main
+    elif module_name == "project_wizard":
+        from project_wizard import main
     elif module_name == "scaffold_cli":
         from scaffold_cli import main
     elif module_name == "doctor":

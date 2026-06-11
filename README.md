@@ -21,6 +21,7 @@ deepagent/
 ├─ launcher_cli.py
 ├─ dev_common.py
 ├─ doctor.py
+├─ project_wizard.py
 ├─ ops_common.py
 ├─ ml_common.py
 ├─ scaffold_common.py
@@ -168,6 +169,7 @@ deepagent          # 선택 메뉴 런처
 deepagents         # 선택 메뉴 런처 별칭
 deepagent-menu     # 선택 메뉴 런처 별칭
 deepagent-chat     # 챗봇형 CLI 직접 실행
+deepagent-project  # 질문형 프로젝트 생성 마법사
 deepagent-console  # 메뉴형 콘솔 UI
 deepagent-web      # 웹 UI 실행
 deepagent-doctor   # 폐쇄망 환경 진단
@@ -180,11 +182,12 @@ deepagent-scaffold # 아이디어 붙여넣기로 폴더/파일 자동 생성
 
 ```text
 1. 챗봇형 CLI
-2. 웹 UI
-3. 메뉴형 콘솔 UI
-4. 아이디어로 폴더/파일 생성
-5. 폐쇄망 환경 진단
-6. 기본 단발 실행 테스트
+2. 질문형 프로젝트 생성
+3. 웹 UI
+4. 메뉴형 콘솔 UI
+5. 아이디어로 폴더/파일 생성
+6. 폐쇄망 환경 진단
+7. 기본 단발 실행 테스트
 ```
 
 ## 5. .env 생성
@@ -466,6 +469,8 @@ deepagent-chat
 /session save <name>  현재 세션 저장
 /session load <name>  저장된 세션 복구
 /sessions             저장된 세션 목록
+/project new          질문에 답하면서 새 프로젝트 구조 생성
+/project preview      질문에 답하고 생성 전 미리보기
 /doctor               폐쇄망 진단 실행
 /dev run <cmd>        개발 명령 실행 후 로그 저장
 /dev fix <cmd>        명령 실행, 오류 분석, 수정안 요청
@@ -507,6 +512,37 @@ CLI도 `rich`가 설치되어 있으면 답변을 Markdown 패널로 렌더링�
 `/dev fix <명령>`은 명령을 실행하고 로그를 저장한 뒤 Auto Fix 리포트를 생성합니다.
 명령이 실패하면 `/dev/last-run.md`와 `/dev/last-fix-plan.md`를 자동 첨부하고 에이전트에게 원인, 수정 대상 파일, 검증 명령을 요청합니다.
 원본 파일 자동 덮어쓰기는 하지 않으며, 제안 내용을 확인한 뒤 `/read`, `/write` 명령으로 적용할 수 있습니다.
+
+### 질문형 프로젝트 생성
+
+Codex처럼 질문에 답하면서 새 프로젝트를 시작하려면 `deepagent-project`를 실행합니다.
+프로젝트 유형, 해결할 문제, 사용자, 주요 기능, 제약사항, 기술스택, 검증 기준을 차례로 묻고 `agent_workspace/projects/<프로젝트명>/` 아래에 초기 구조를 생성합니다.
+
+```powershell
+deepagent-project
+```
+
+생성 전 미리보기만 하려면 아래처럼 실행합니다.
+
+```powershell
+deepagent-project --preview
+```
+
+`deepagent-chat` 안에서도 같은 기능을 사용할 수 있습니다.
+
+```text
+/project new
+/project preview
+```
+
+생성되는 기본 산출물:
+
+- `README.md`
+- `docs/requirements.md`
+- `docs/development-plan.md`
+- `src/main.py`
+- `tests/README.md`
+- ML Platform 유형 선택 시 `platform/job_template.yaml`, `platform/mlflow_config.yaml`
 
 작업 폴더와 플랜 저장 위치는 `.env`에서 바꿀 수 있습니다.
 
