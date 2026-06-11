@@ -10,6 +10,7 @@ from autofix_common import analyze_log_file, render_fix_report, save_fix_report
 from ml_common import ensure_model_catalog, save_experiment, save_model_catalog_markdown
 from ops_common import goal_to_markdown, save_goal_markdown, session_dir, slugify as common_slugify
 from registration_common import (
+    create_registration_package,
     render_registration_report,
     save_registration_profile,
     scan_project,
@@ -396,6 +397,7 @@ HTML = """<!doctype html>
         <div class="actions">
           <button id="registerScan" class="secondary" type="button">등록 분석</button>
           <button id="registerScaffold" class="secondary" type="button">등록 구조 생성</button>
+          <button id="registerPackage" class="secondary" type="button">등록 패키지 생성</button>
           <button id="registerFixLog" class="ghost" type="button">오류 로그 분석</button>
         </div>
       </div>
@@ -444,6 +446,7 @@ HTML = """<!doctype html>
     const experimentButton = document.getElementById("experiment");
     const registerScanButton = document.getElementById("registerScan");
     const registerScaffoldButton = document.getElementById("registerScaffold");
+    const registerPackageButton = document.getElementById("registerPackage");
     const registerFixLogButton = document.getElementById("registerFixLog");
     const deletePromptButton = document.getElementById("deletePrompt");
     const downloadButton = document.getElementById("download");
@@ -1030,6 +1033,25 @@ HTML = """<!doctype html>
       }
     });
 
+    registerPackageButton.addEventListener("click", async () => {
+      const project_path = registerPath.value.trim();
+      if (!project_path) {
+        setResultText("프로젝트 경로를 입력하세요.");
+        return;
+      }
+      registerPackageButton.disabled = true;
+      try {
+        const data = await postJson("/api/register/package", { project_path });
+        setResultText(`${data.report}\n\n## Registration Package\n\n- ${data.package_path}`);
+        statusText.textContent = `등록 패키지 생성: ${data.package_path}`;
+      } catch (error) {
+        setResultText(`등록 패키지 생성 실패: ${error.message}`);
+        statusText.textContent = "등록 패키지 생성 실패";
+      } finally {
+        registerPackageButton.disabled = false;
+      }
+    });
+
     registerFixLogButton.addEventListener("click", async () => {
       const log_path = registerLogPath.value.trim();
       if (!log_path) {
@@ -1533,6 +1555,7 @@ class AgentHandler(BaseHTTPRequestHandler):
             "/api/scaffold/run-stream",
             "/api/register/scan",
             "/api/register/scaffold",
+            "/api/register/package",
             "/api/register/fix-log",
             "/api/prompts/save",
             "/api/prompts/delete",
@@ -1587,6 +1610,9 @@ class AgentHandler(BaseHTTPRequestHandler):
                 return
             if self.path == "/api/register/scaffold":
                 self._register_scaffold(payload)
+                return
+            if self.path == "/api/register/package":
+                self._register_package(payload)
                 return
             if self.path == "/api/register/fix-log":
                 self._register_fix_log(payload)
@@ -1925,6 +1951,23 @@ class AgentHandler(BaseHTTPRequestHandler):
                 "workspace": result["workspace"],
                 "files": result["files"],
                 "report": report,
+            }
+        )
+
+    def _register_package(self, payload: dict) -> None:
+        project_path = str(payload.get("project_path", "")).strip()
+        if not project_path:
+            self._send_json({"error": "project_path가 필요합니다."}, HTTPStatus.BAD_REQUEST)
+            return
+        result = create_registration_package(project_path)
+        self._send_json(
+            {
+                "ok": True,
+                "workspace": result["workspace"],
+                "package_path": result["package_path"],
+                "files": result["files"],
+                "readiness": result["readiness"],
+                "report": render_registration_report(result["profile"]),
             }
         )
 

@@ -28,4 +28,5 @@ experiments/
 model_catalog.json
 model_catalog.md
 registrations/
+registration_packages/
 fix_reports/

@@ -37,6 +37,7 @@ from ops_common import (
 )
 from project_wizard import run_project_wizard
 from registration_common import (
+    create_registration_package,
     render_registration_report,
     save_registration_profile,
     scan_project,
@@ -130,6 +131,7 @@ Commands
   /register scan <path> Analyze an ML project for platform registration
   /register scaffold <p> Generate standard registration workspace
   /register report <p> Save registration profile and report
+  /register package <p> Create a zip package for platform handoff
   /register fix-log <p> Analyze job log and create fix plan
   /exit                 Quit
 
@@ -818,6 +820,18 @@ def handle_register_command(state: ChatState, args: str) -> None:
         print("Generated files:")
         for filename in result["files"]:
             print(f"- {filename}")
+    elif command == "package":
+        if not value:
+            print("Usage: /register package <project-path>")
+            return
+        try:
+            result = create_registration_package(value)
+        except Exception as exc:
+            print(f"Registration package failed: {exc}")
+            return
+        print(render_registration_report(result["profile"]))
+        print(f"Registration package: {result['package_path']}")
+        print(f"Readiness: {result.get('readiness', {}).get('score', 0)}/100")
     elif command == "fix-log":
         if not value:
             print("Usage: /register fix-log <log-file>")
@@ -831,7 +845,7 @@ def handle_register_command(state: ChatState, args: str) -> None:
         print(render_fix_report(report))
         print(f"Fix report saved: {path}")
     else:
-        print("Usage: /register scan|scaffold|report|fix-log <path>")
+        print("Usage: /register scan|scaffold|report|package|fix-log <path>")
 
 
 def attach_dev_artifacts(state: ChatState) -> int:

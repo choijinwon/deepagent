@@ -228,6 +228,7 @@ EXPERIMENT_DIR=experiments
 SCAFFOLD_OVERWRITE=false
 REGISTRATION_DIR=registrations
 REGISTERED_WORKSPACE_DIR=agent_workspace/registered
+REGISTRATION_PACKAGE_DIR=registration_packages
 FIX_REPORT_DIR=fix_reports
 MLFLOW_TRACKING_URI=
 ML_PLATFORM_DEFAULT_QUEUE=
@@ -497,6 +498,7 @@ deepagent-chat
 /register scan <path> ML 프로젝트 등록 정보 분석
 /register scaffold <path> ML Platform 등록 표준 구조 생성
 /register report <path> 등록 프로필과 보고서 저장
+/register package <path> 등록 산출물 zip 패키지 생성
 /register fix-log <path> Job 오류 로그 분석 및 수정안 생성
 /exit                 종료
 ```
@@ -588,6 +590,7 @@ EXPERIMENT_DIR=experiments
 SCAFFOLD_OVERWRITE=false
 REGISTRATION_DIR=registrations
 REGISTERED_WORKSPACE_DIR=agent_workspace/registered
+REGISTRATION_PACKAGE_DIR=registration_packages
 FIX_REPORT_DIR=fix_reports
 MLFLOW_TRACKING_URI=
 ML_PLATFORM_DEFAULT_QUEUE=
@@ -728,6 +731,7 @@ runbooks/vllm
 `registration_report.md`에는 아래 섹션이 생성됩니다.
 
 ```text
+Registration Readiness
 Project Type
 Execution
 Environment Files
@@ -740,6 +744,18 @@ MLFlow
 Job Template
 Warnings
 Onboarding Guide
+```
+
+`Registration Readiness`는 등록 전 점검표와 점수를 표시합니다.
+
+```text
+Registration Readiness: 72/100 (needs-review)
+
+[OK] 학습 진입점
+[OK] 환경 파일
+[주의] MLFlow Tracking URI
+[주의] Platform Queue
+[오류] 외부 의존성 위험
 ```
 
 분석 결과를 파일로 저장:
@@ -779,6 +795,21 @@ agent_workspace/
 
 원본 프로젝트는 수정하지 않고, 표준 등록 폴더에 래퍼와 템플릿만 생성합니다.
 
+플랫폼팀 전달 또는 내부 포털 업로드용 zip 패키지를 만들려면 아래 명령을 실행합니다.
+
+```text
+/register package C:\work\my-model
+```
+
+생성 위치:
+
+```text
+registration_packages/
+└─ 20260612-153000-my-model-registration-package.zip
+```
+
+zip 안에는 `registration_profile.json`, `registration_report.md`, `job_template.yaml`, `mlflow_config.yaml`, `entrypoint.py`, `requirements.lock.txt`, `registration_package_manifest.json`이 포함됩니다.
+
 Job 실행 오류 로그 분석:
 
 ```text
@@ -800,7 +831,7 @@ fix_reports/
 └─ 20260611-153000-job-error-log-fix-plan.md
 ```
 
-웹 UI에서는 `ML Platform 등록` 패널에 프로젝트 경로 또는 로그 파일 경로를 입력한 뒤 `등록 분석`, `등록 구조 생성`, `오류 로그 분석` 버튼을 사용합니다.
+웹 UI에서는 `ML Platform 등록` 패널에 프로젝트 경로 또는 로그 파일 경로를 입력한 뒤 `등록 분석`, `등록 구조 생성`, `등록 패키지 생성`, `오류 로그 분석` 버튼을 사용합니다.
 
 ## 12. 폐쇄망 진단
 

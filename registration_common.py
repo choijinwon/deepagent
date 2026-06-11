@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -87,6 +88,10 @@ def registration_dir() -> Path:
 
 def registered_workspace_dir() -> Path:
     return Path(os.getenv("REGISTERED_WORKSPACE_DIR", "agent_workspace/registered")).resolve()
+
+
+def registration_package_dir() -> Path:
+    return Path(os.getenv("REGISTRATION_PACKAGE_DIR", "registration_packages")).resolve()
 
 
 def now_text() -> str:
@@ -292,6 +297,138 @@ def build_onboarding_guide(profile: dict[str, Any]) -> list[str]:
     return guide
 
 
+def check_result(status: str, title: str, detail: str, weight: int = 10) -> dict[str, Any]:
+    return {"status": status, "title": title, "detail": detail, "weight": weight}
+
+
+def find_closed_network_risks(project_root: Path, files: list[Path]) -> list[str]:
+    risk_tokens = ("git+", "http://", "https://", "-e git", "pip install")
+    risks = []
+    for path in files:
+        if path.suffix.lower() not in {".txt", ".toml", ".yml", ".yaml", ".cfg", ".ini", ".py", ".sh", ".ps1"}:
+            continue
+        content = read_small_text(path, limit=80_000).lower()
+        if not content:
+            continue
+        if any(token in content for token in risk_tokens):
+            risks.append(path.relative_to(project_root).as_posix())
+    return sorted(set(risks))[:20]
+
+
+def build_registration_readiness(project_root: Path, files: list[Path], profile: dict[str, Any]) -> dict[str, Any]:
+    checks = []
+    env_files = profile.get("environment_files", {})
+    job = profile.get("job_template", {})
+    execution = profile.get("execution", {})
+    closed_network_risks = find_closed_network_risks(project_root, files)
+
+    checks.append(
+        check_result(
+            "pass" if profile.get("default_entrypoint") else "fail",
+            "학습 진입점",
+            profile.get("default_entrypoint") or "train.py, main.py, run.py, notebook 후보를 찾지 못했습니다.",
+            15,
+        )
+    )
+    checks.append(
+        check_result(
+            "pass" if profile.get("requirements") else "fail",
+            "환경 파일",
+            ", ".join(profile.get("requirements") or []) or "requirements.txt, pyproject.toml, environment.yml 후보가 필요합니다.",
+            15,
+        )
+    )
+    checks.append(
+        check_result(
+            "warn" if profile.get("primary_framework") == "legacy-script" else "pass",
+            "프레임워크 판별",
+            profile.get("primary_framework") or "unknown",
+            10,
+        )
+    )
+    checks.append(
+        check_result(
+            "pass" if profile.get("mlflow", {}).get("tracking_uri") else "warn",
+            "MLFlow Tracking URI",
+            profile.get("mlflow", {}).get("tracking_uri") or "MLFLOW_TRACKING_URI가 비어 있습니다.",
+            10,
+        )
+    )
+    checks.append(
+        check_result(
+            "pass" if job.get("queue") else "warn",
+            "Platform Queue",
+            job.get("queue") or "ML_PLATFORM_DEFAULT_QUEUE가 비어 있습니다.",
+            10,
+        )
+    )
+    resource_ok = bool(job.get("cpu")) and bool(job.get("memory")) and job.get("gpu") is not None
+    checks.append(
+        check_result(
+            "pass" if resource_ok else "fail",
+            "CPU/GPU/Memory",
+            f"cpu={job.get('cpu')}, gpu={job.get('gpu')}, memory={job.get('memory')}",
+            10,
+        )
+    )
+    args_status = "pass" if execution.get("detected_options") or profile.get("project_type") in ("notebook-only", "legacy-script") else "warn"
+    checks.append(
+        check_result(
+            args_status,
+            "실행 인자",
+            execution.get("arguments") or "명시적 실행 인자를 감지하지 못했습니다. 데이터/config/model output 경로를 확인하세요.",
+            10,
+        )
+    )
+    notebook_status = "warn" if profile.get("project_type") == "notebook-only" else "pass"
+    checks.append(
+        check_result(
+            notebook_status,
+            "Notebook/Legacy 처리",
+            "Notebook은 script 변환 또는 papermill 실행 방식 확정이 필요합니다." if notebook_status == "warn" else "추가 변환 필수 항목 없음",
+            10,
+        )
+    )
+    conda_only = "conda" in env_files and "pip" not in env_files
+    checks.append(
+        check_result(
+            "warn" if conda_only else "pass",
+            "폐쇄망 패키지 호환성",
+            "Conda-only 환경입니다. pip wheel 번들 변환 가능성을 확인하세요." if conda_only else "pip/pyproject 기반 오프라인 번들 생성 가능",
+            10,
+        )
+    )
+    checks.append(
+        check_result(
+            "warn" if closed_network_risks else "pass",
+            "외부 의존성 위험",
+            ", ".join(closed_network_risks) if closed_network_risks else "외부 URL/git 설치 패턴을 찾지 못했습니다.",
+            10,
+        )
+    )
+
+    total_weight = sum(item["weight"] for item in checks)
+    earned = 0.0
+    for item in checks:
+        if item["status"] == "pass":
+            earned += item["weight"]
+        elif item["status"] == "warn":
+            earned += item["weight"] * 0.5
+    score = round((earned / total_weight) * 100) if total_weight else 0
+    if score >= 85 and not any(item["status"] == "fail" for item in checks):
+        level = "ready"
+    elif score >= 65:
+        level = "needs-review"
+    else:
+        level = "blocked"
+    return {
+        "score": score,
+        "level": level,
+        "checks": checks,
+        "summary": f"Registration Readiness: {score}/100 ({level})",
+    }
+
+
 def find_entrypoints(project_root: Path, files: list[Path]) -> list[str]:
     candidates = []
     for preferred in ENTRYPOINT_NAMES:
@@ -379,6 +516,7 @@ def scan_project(project_path: str) -> dict[str, Any]:
     }
     profile["onboarding_guide"] = build_onboarding_guide(profile)
     profile["warnings"] = build_warnings(default_entrypoint, requirements, frameworks, environment_files)
+    profile["readiness"] = build_registration_readiness(project_root, files, profile)
     return profile
 
 
@@ -428,6 +566,20 @@ def render_registration_report(profile: dict[str, Any]) -> str:
         f"- Frameworks: {', '.join(profile['frameworks'])}",
         f"- Default Entrypoint: {profile.get('default_entrypoint') or 'not found'}",
         "",
+        "## Registration Readiness",
+        "",
+        f"- Score: {profile.get('readiness', {}).get('score', 0)}/100",
+        f"- Level: {profile.get('readiness', {}).get('level', 'unknown')}",
+        "",
+        "### Checklist",
+        "",
+    ]
+    for item in profile.get("readiness", {}).get("checks", []):
+        marker = {"pass": "[OK]", "warn": "[주의]", "fail": "[오류]"}.get(item.get("status"), "[정보]")
+        lines.append(f"- {marker} {item.get('title')}: {item.get('detail')}")
+    lines.extend(
+        [
+            "",
         "## Execution",
         "",
         f"- Style: {profile.get('execution', {}).get('style', 'unknown')}",
@@ -435,7 +587,8 @@ def render_registration_report(profile: dict[str, Any]) -> str:
         "",
         "### Execution Hints",
         "",
-    ]
+        ]
+    )
     lines.extend([f"- {item}" for item in profile.get("execution", {}).get("hints", [])] or ["- none"])
     lines.extend(
         [
@@ -613,6 +766,8 @@ def render_registered_readme(profile: dict[str, Any]) -> str:
             "",
             f"- Project Type: {profile.get('project_type')}",
             f"- Primary Framework: {profile.get('primary_framework')}",
+            f"- Registration Readiness: {profile.get('readiness', {}).get('score', 0)}/100 "
+            f"({profile.get('readiness', {}).get('level', 'unknown')})",
             f"- Recommended CPU/GPU/Memory: {profile.get('job_template', {}).get('cpu')}/"
             f"{profile.get('job_template', {}).get('gpu')}/{profile.get('job_template', {}).get('memory')}",
             "",
@@ -650,3 +805,44 @@ def write_requirements_lock(project_root: Path, profile: dict[str, Any], target_
     lines = ["# No requirements.txt was found.", "# Candidate dependency files:"]
     lines.extend(profile.get("requirements", []) or ["# none"])
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def create_registration_package(project_path: str) -> dict[str, Any]:
+    scaffold = scaffold_registered_workspace(project_path)
+    profile = scaffold["profile"]
+    project_slug = slugify(profile["project_name"], "project")
+    profile_dir = registration_dir() / project_slug
+    workspace = Path(scaffold["workspace"])
+    package_root = registration_package_dir()
+    package_root.mkdir(parents=True, exist_ok=True)
+    package_path = package_root / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{project_slug}-registration-package.zip"
+    manifest = {
+        "created_at": now_text(),
+        "project_name": profile["project_name"],
+        "project_path": profile["project_path"],
+        "readiness": profile.get("readiness", {}),
+        "workspace": workspace.as_posix(),
+        "files": [],
+    }
+
+    with zipfile.ZipFile(package_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(profile_dir.glob("*")):
+            if path.is_file():
+                arcname = f"registration/{path.name}"
+                archive.write(path, arcname)
+                manifest["files"].append(arcname)
+        for path in sorted(workspace.glob("*")):
+            if path.is_file():
+                arcname = f"registered_workspace/{path.name}"
+                archive.write(path, arcname)
+                manifest["files"].append(arcname)
+        manifest["files"].append("registration_package_manifest.json")
+        archive.writestr("registration_package_manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+
+    return {
+        "profile": profile,
+        "workspace": workspace.as_posix(),
+        "package_path": package_path.as_posix(),
+        "files": manifest["files"],
+        "readiness": profile.get("readiness", {}),
+    }
