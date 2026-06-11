@@ -66,7 +66,7 @@ Flag these as `[주의]` or `[오류]`:
 - Python:
 - Virtualenv:
 - Offline Package Dir:
-- Hynix AI Studio Image:
+- AI Studio Image:
 
 ## 2. 설치/검증 체크리스트
 - [ ] wheel bundle 생성

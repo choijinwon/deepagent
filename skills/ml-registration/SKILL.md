@@ -1,11 +1,11 @@
 ---
 name: ml-registration
-description: Guide AI and ML developers through closed-network Hynix AI Studio registration, including project scan, MLflow setup, job template review, readiness checks, package creation, and handoff.
+description: Guide AI and ML developers through closed-network AI Studio registration, including project scan, MLflow setup, job template review, readiness checks, package creation, and handoff.
 ---
 
-# Hynix AI Studio Registration Skill
+# AI Studio Registration Skill
 
-Use this skill when the user wants to register an AI/ML project to Hynix AI Studio, create registration artifacts, prepare a Job Template, configure MLflow, or help a junior developer follow the registration flow without reading a long manual.
+Use this skill when the user wants to register an AI/ML project to AI Studio, create registration artifacts, prepare a Job Template, configure MLflow, or help a junior developer follow the registration flow without reading a long manual.
 
 ## Reference Principles
 
@@ -20,7 +20,7 @@ This skill follows public MLflow and Kubernetes platform patterns, adapted for c
 ## Closed-Network Rules
 
 - Do not use external internet, external package indexes, external APIs, or external SaaS tools.
-- Do not assume the internal Hynix AI Studio API schema unless it is provided.
+- Do not assume the internal AI Studio API schema unless it is provided.
 - Generate offline artifacts first: profile, report, config, job template, wrapper, requirements lock, and package zip.
 - Treat API keys, tokens, internal IPs, hostnames, dataset paths, and service account names as sensitive.
 
@@ -67,7 +67,7 @@ When information is missing, ask one question at a time:
 4. config 파일 경로가 있나요?
 5. 모델 출력 경로는 어디인가요?
 6. MLflow Tracking URI는 무엇인가요?
-7. 사용할 Hynix AI Studio Queue는 무엇인가요?
+7. 사용할 AI Studio Queue는 무엇인가요?
 8. GPU가 꼭 필요한가요?
 9. CPU/GPU/Memory 기본 추천값을 그대로 사용할까요?
 10. 등록 패키지를 생성할까요?
@@ -78,7 +78,7 @@ When information is missing, ask one question at a time:
 Use this structure for registration guidance:
 
 ```markdown
-# Hynix AI Studio 등록 준비 결과
+# AI Studio 등록 준비 결과
 
 ## 1. 자동 분석 요약
 - Project Type:
@@ -91,7 +91,7 @@ Use this structure for registration guidance:
 - [ ] 학습 진입점 확인
 - [ ] 환경 파일 확인
 - [ ] MLflow Tracking URI 확인
-- [ ] Hynix AI Studio Queue 확인
+- [ ] AI Studio Queue 확인
 - [ ] CPU/GPU/Memory 확인
 - [ ] 실행 Arguments 확인
 - [ ] 외부 의존성 위험 확인

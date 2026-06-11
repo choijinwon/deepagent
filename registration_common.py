@@ -95,7 +95,7 @@ def registration_package_dir() -> Path:
 
 
 def ai_studio_name() -> str:
-    return os.getenv("AI_STUDIO_NAME", "Hynix AI Studio")
+    return os.getenv("AI_STUDIO_NAME", "AI Studio")
 
 
 def env_value(primary: str, legacy: str, default: str = "") -> str:

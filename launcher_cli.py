@@ -11,7 +11,7 @@ MENU = [
     ("3", "web", "웹 UI", "deepagent-web", "web_closed"),
     ("4", "console", "메뉴형 콘솔 UI", "deepagent-console", "console_ui"),
     ("5", "scaffold", "아이디어로 폴더/파일 생성", "deepagent-scaffold", "scaffold_cli"),
-    ("6", "register", "Hynix AI Studio 등록 위자드", "deepagent-register-wizard", "registration_wizard"),
+    ("6", "register", "AI Studio 등록 위자드", "deepagent-register-wizard", "registration_wizard"),
     ("7", "doctor", "폐쇄망 환경 진단", "deepagent-doctor", "doctor"),
     ("8", "run", "기본 단발 실행 테스트", "deepagent-run", "app_closed"),
 ]
@@ -20,7 +20,7 @@ ONBOARDING = [
     (
         "1",
         "register",
-        "모델 프로젝트를 Hynix AI Studio에 등록하고 싶어요",
+        "모델 프로젝트를 AI Studio에 등록하고 싶어요",
         "registration_wizard",
         "프로젝트 분석, 점검표, MLflow/AI Studio Queue/리소스 질문, 등록 패키지 생성",
     ),

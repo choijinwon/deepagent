@@ -390,7 +390,7 @@ HTML = """<!doctype html>
         </div>
       </div>
       <div class="scaffold-panel">
-        <label for="registerPath">Hynix AI Studio 등록 대상 프로젝트 경로</label>
+        <label for="registerPath">AI Studio 등록 대상 프로젝트 경로</label>
         <input id="registerPath" type="text" placeholder="예: C:\\work\\my-model 또는 /workspace/my-model">
         <label for="registerLogPath">오류 로그 파일 경로</label>
         <input id="registerLogPath" type="text" placeholder="예: agent_workspace/logs/job-error.log">

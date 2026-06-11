@@ -179,7 +179,7 @@ deepagents         # 선택 메뉴 런처 별칭
 deepagent-menu     # 선택 메뉴 런처 별칭
 deepagent-chat     # 챗봇형 CLI 직접 실행
 deepagent-project  # 질문형 프로젝트 생성 마법사
-deepagent-register-wizard # Hynix AI Studio 등록 위자드
+deepagent-register-wizard # AI Studio 등록 위자드
 deepagent-console  # 메뉴형 콘솔 UI
 deepagent-web      # 웹 UI 실행
 deepagent-doctor   # 폐쇄망 환경 진단
@@ -191,7 +191,7 @@ deepagent-scaffold # 아이디어 붙여넣기로 폴더/파일 자동 생성
 처음 사용하는 사람을 위한 목적 선택 화면이 먼저 뜹니다.
 
 ```text
-1. 모델 프로젝트를 Hynix AI Studio에 등록하고 싶어요
+1. 모델 프로젝트를 AI Studio에 등록하고 싶어요
 2. 학습 Job 오류를 고치고 싶어요
 3. 폐쇄망 Python/ML 환경을 점검하고 싶어요
 4. 모델 API 연결을 테스트하고 싶어요
@@ -243,7 +243,7 @@ REGISTERED_WORKSPACE_DIR=agent_workspace/registered
 REGISTRATION_PACKAGE_DIR=registration_packages
 FIX_REPORT_DIR=fix_reports
 MLFLOW_TRACKING_URI=
-AI_STUDIO_NAME=Hynix AI Studio
+AI_STUDIO_NAME=AI Studio
 AI_STUDIO_DEFAULT_QUEUE=
 AI_STUDIO_DEFAULT_GPU=1
 AI_STUDIO_DEFAULT_CPU=4
@@ -338,7 +338,7 @@ agent.invoke({
 - `security-report`: 보안 점검 보고서/TODO/checklist 작성
 - `access-audit`: 접근권한 점검과 권한 회수 검토
 - `vllm-ops-wiki`: vLLM/Qwen 운영 기록을 위키 Markdown으로 정리
-- `ml-registration`: ML 개발자가 매뉴얼 없이 Hynix AI Studio 등록 플로우를 따라가도록 안내
+- `ml-registration`: ML 개발자가 매뉴얼 없이 AI Studio 등록 플로우를 따라가도록 안내
 - `ml-autofix`: 학습 Job, MLflow, 의존성, 경로, GPU 메모리 오류 분석과 수정 계획 생성
 - `offline-ml-env`: 폐쇄망 ML 개발환경, 오프라인 wheel 번들, Python/CUDA 호환성 점검
 - `mlflow-agent`: MLflow 요청을 tracing/evaluation/debug/metrics/registration 스킬로 라우팅
@@ -349,7 +349,7 @@ agent.invoke({
 
 `ml-registration`, `ml-autofix`, `offline-ml-env`, `mlflow-*` 스킬은 공개 공식 문서와 `mlflow/skills` 저장소의 skill 라우팅/관측/평가/디버깅 패턴을 참고해 폐쇄망용으로 정리했습니다.
 참고한 기준은 MLflow Tracking/Model Registry의 run, experiment, model version, lineage, trace/evaluation 개념과 Kubernetes resource request/limit 개념입니다.
-내부 Hynix AI Studio 매뉴얼이나 Job Template 스키마가 제공되면 내부 기준을 우선합니다.
+내부 AI Studio 매뉴얼이나 Job Template 스키마가 제공되면 내부 기준을 우선합니다.
 
 참고 공식 문서:
 
@@ -416,7 +416,7 @@ PROMPT_STORE_PATH=prompt_templates.json
 `작업 생성기` 영역에 템플릿을 붙여넣으면 `agent_workspace/` 아래 폴더와 파일을 자동 생성하고, 목표와 플랜도 함께 저장할 수 있습니다.
 `생성 후 실행` 버튼은 자동 생성된 파일을 에이전트 컨텍스트에 첨부한 뒤 요청을 바로 실행합니다.
 `모델 카탈로그` 버튼은 `model_catalog.json`과 `model_catalog.md`를 생성하고, `모델 비교 실험` 버튼은 등록 모델별 응답을 `experiments/`에 저장합니다.
-`Hynix AI Studio 등록` 패널에서는 기존 ML 프로젝트 경로를 분석하고, AI Studio 등록용 표준 구조와 오류 로그 분석 리포트를 생성할 수 있습니다.
+`AI Studio 등록` 패널에서는 기존 ML 프로젝트 경로를 분석하고, AI Studio 등록용 표준 구조와 오류 로그 분석 리포트를 생성할 수 있습니다.
 
 ```text
 wiki_logs/
@@ -457,7 +457,7 @@ deepagent-console
 - 질문형 프로젝트 생성/미리보기
 - 아이디어 붙여넣기 기반 폴더/파일 생성/미리보기
 - 생성 코드 실행, 오류 자동 분석, 패치 후보 승인 적용, 테스트 재실행
-- Hynix AI Studio 등록 위자드
+- AI Studio 등록 위자드
 
 콘솔 UI는 무료 오픈소스 `rich` 라이브러리를 사용해 Markdown, 표, 패널, 코드블록을 보기 좋게 표시합니다.
 `rich` wheel은 `requirements.txt`에 포함되어 외부 PC의 `prepare_external_pc.ps1` 실행 시 `offline_packages/`에 함께 다운로드됩니다.
@@ -540,10 +540,10 @@ deepagent-chat
 /scaffold last        마지막 생성 결과 보기
 /scaffold attach      마지막 생성 파일을 에이전트 컨텍스트에 첨부
 /register scan <path> ML 프로젝트 등록 정보 분석
-/register scaffold <path> Hynix AI Studio 등록 표준 구조 생성
+/register scaffold <path> AI Studio 등록 표준 구조 생성
 /register report <path> 등록 프로필과 보고서 저장
 /register package <path> 등록 산출물 zip 패키지 생성
-/register wizard      질문형 Hynix AI Studio 등록 위자드 실행
+/register wizard      질문형 AI Studio 등록 위자드 실행
 /register fix-log <path> Job 오류 로그 분석 및 수정안 생성
 /exit                 종료
 ```
@@ -617,7 +617,7 @@ deepagent-project --preview
 - `docs/development-plan.md`
 - `src/main.py`
 - `tests/README.md`
-- Hynix AI Studio 유형 선택 시 `platform/job_template.yaml`, `platform/mlflow_config.yaml`
+- AI Studio 유형 선택 시 `platform/job_template.yaml`, `platform/mlflow_config.yaml`
 
 작업 폴더와 플랜 저장 위치는 `.env`에서 바꿀 수 있습니다.
 
@@ -638,7 +638,7 @@ REGISTERED_WORKSPACE_DIR=agent_workspace/registered
 REGISTRATION_PACKAGE_DIR=registration_packages
 FIX_REPORT_DIR=fix_reports
 MLFLOW_TRACKING_URI=
-AI_STUDIO_NAME=Hynix AI Studio
+AI_STUDIO_NAME=AI Studio
 AI_STUDIO_DEFAULT_QUEUE=
 AI_STUDIO_DEFAULT_GPU=1
 AI_STUDIO_DEFAULT_CPU=4
@@ -757,9 +757,9 @@ runbooks/vllm
 
 `model_catalog.json`은 모델 설명, 컨텍스트 길이, Tool Calling 확인 상태, 권장 temperature, 사용 사례를 기록하는 오프라인 모델 장부입니다.
 
-## 11. OpenCode IDE 기반 Hynix AI Studio 등록 자동화
+## 11. OpenCode IDE 기반 AI Studio 등록 자동화
 
-기존 ML 프로젝트를 분석해 Hynix AI Studio 등록에 필요한 초안 파일을 자동 생성합니다.
+기존 ML 프로젝트를 분석해 AI Studio 등록에 필요한 초안 파일을 자동 생성합니다.
 1차 구현은 실제 플랫폼 API 호출 없이 오프라인 산출물 생성과 검증 중심입니다.
 
 프로젝트 분석:
@@ -788,10 +788,10 @@ deepagent-register-wizard
 3. 학습 진입점
 4. MLFlow Tracking URI
 5. Experiment 이름
-6. Hynix AI Studio Queue
+6. AI Studio Queue
 7. 실행 Arguments
 8. CPU/GPU/Memory
-9. Hynix AI Studio Image
+9. AI Studio Image
 10. 등록 workspace와 zip 패키지 생성
 ```
 
@@ -832,7 +832,7 @@ Registration Readiness: 72/100 (needs-review)
 [OK] 학습 진입점
 [OK] 환경 파일
 [주의] MLFlow Tracking URI
-[주의] Hynix AI Studio Queue
+[주의] AI Studio Queue
 [오류] 외부 의존성 위험
 ```
 
@@ -851,7 +851,7 @@ registrations/
    └─ registration_report.md
 ```
 
-Hynix AI Studio 등록용 표준 구조 생성:
+AI Studio 등록용 표준 구조 생성:
 
 ```text
 /register scaffold C:\work\my-model
@@ -909,7 +909,7 @@ fix_reports/
 └─ 20260611-153000-job-error-log-fix-plan.md
 ```
 
-웹 UI에서는 `Hynix AI Studio 등록` 패널에 프로젝트 경로 또는 로그 파일 경로를 입력한 뒤 `등록 분석`, `등록 구조 생성`, `등록 패키지 생성`, `오류 로그 분석` 버튼을 사용합니다.
+웹 UI에서는 `AI Studio 등록` 패널에 프로젝트 경로 또는 로그 파일 경로를 입력한 뒤 `등록 분석`, `등록 구조 생성`, `등록 패키지 생성`, `오류 로그 분석` 버튼을 사용합니다.
 
 ## 12. 폐쇄망 진단
 
