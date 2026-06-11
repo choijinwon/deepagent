@@ -16,6 +16,51 @@ MENU = [
     ("8", "run", "기본 단발 실행 테스트", "deepagent-run", "app_closed"),
 ]
 
+ONBOARDING = [
+    (
+        "1",
+        "register",
+        "모델 프로젝트를 ML Platform에 등록하고 싶어요",
+        "registration_wizard",
+        "프로젝트 분석, 점검표, MLflow/Queue/리소스 질문, 등록 패키지 생성",
+    ),
+    (
+        "2",
+        "fix",
+        "학습 Job 오류를 고치고 싶어요",
+        "chat_cli",
+        "deepagent-chat에서 /register fix-log 또는 /dev fix-log로 오류 로그 분석",
+    ),
+    (
+        "3",
+        "env",
+        "폐쇄망 Python/ML 환경을 점검하고 싶어요",
+        "doctor",
+        ".env, Qwen/vLLM, 필수 패키지, 내부 API 연결 상태 진단",
+    ),
+    (
+        "4",
+        "api",
+        "모델 API 연결을 테스트하고 싶어요",
+        "app_closed",
+        "Qwen/vLLM OpenAI 호환 API와 Tool Calling 기본 실행 테스트",
+    ),
+    (
+        "5",
+        "develop",
+        "아이디어로 프로젝트를 만들고 개발하고 싶어요",
+        "project_wizard",
+        "질문형 프로젝트 생성 후 CLI/콘솔에서 실행, 오류 분석, 재테스트",
+    ),
+    (
+        "6",
+        "web",
+        "브라우저 화면에서 사용하고 싶어요",
+        "web_closed",
+        "웹 UI에서 모델 선택, 등록 분석, 패키지 생성, 프롬프트/위키 관리",
+    ),
+]
+
 
 def render_menu() -> None:
     if rich_enabled():
@@ -42,12 +87,50 @@ def render_menu() -> None:
     print("q. 종료")
 
 
+def render_onboarding() -> None:
+    if rich_enabled():
+        from rich.table import Table
+        from ui_common import console
+
+        table = Table(title="처음 사용하는 분을 위한 DeepAgent 시작", show_lines=True)
+        table.add_column("번호", justify="center", style="bold cyan", no_wrap=True)
+        table.add_column("하고 싶은 일", style="bold green")
+        table.add_column("설명")
+        for number, _, title, _, description in ONBOARDING:
+            table.add_row(number, title, description)
+        table.add_row("m", "전체 메뉴 보기", "기존 deepagent 상세 메뉴를 봅니다.")
+        table.add_row("q", "종료", "아무 작업도 실행하지 않습니다.")
+        console.print(table)
+        console.print("[dim]번호를 입력하세요. 잘 모르겠으면 1번을 추천합니다.[/dim]")
+        return
+
+    print("")
+    print("=" * 78)
+    print(" 처음 사용하는 분을 위한 DeepAgent 시작")
+    print("=" * 78)
+    for number, _, title, _, description in ONBOARDING:
+        print(f"{number}. {title}")
+        print(f"   - {description}")
+    print("m. 전체 메뉴 보기")
+    print("q. 종료")
+
+
 def module_for_choice(value: str) -> tuple[str, str] | None:
     selected = value.strip().lower()
     if not selected:
         return None
     for number, alias, title, command, module_name in MENU:
         if selected in (number, alias, command):
+            return title, module_name
+    return None
+
+
+def module_for_onboarding_choice(value: str) -> tuple[str, str] | None:
+    selected = value.strip().lower()
+    if not selected:
+        return None
+    for number, alias, title, module_name, _ in ONBOARDING:
+        if selected in (number, alias):
             return title, module_name
     return None
 
@@ -85,6 +168,22 @@ def main() -> None:
         _, module_name = choice
         dispatch(module_name)
         return
+
+    render_onboarding()
+    selected = input("\n무엇을 하고 싶나요?: ").strip()
+    if selected.lower() in ("q", "quit", "exit", "0"):
+        print_status_line("종료합니다.", "dim")
+        return
+    if selected.lower() not in ("m", "menu", "전체", "전체메뉴"):
+        choice = module_for_onboarding_choice(selected)
+        if choice:
+            title, module_name = choice
+            print_markdown_result("시작", f"**{title}** 실행", border_style="cyan")
+            if module_name == "chat_cli":
+                print_status_line("오류 로그 분석은 chat CLI 실행 후 `/register fix-log <로그파일>` 또는 `/dev fix-log <로그파일>`를 사용하세요.", "cyan")
+            dispatch(module_name)
+            return
+        print_status_line("선택을 찾을 수 없어 전체 메뉴를 표시합니다.", "yellow")
 
     while True:
         render_menu()
