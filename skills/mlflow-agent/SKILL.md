@@ -11,7 +11,7 @@ Use this skill when the user asks a broad MLflow question or wants help with MLf
 
 Map the user intent to the right local harness skill:
 
-- ML Platform registration or model handoff -> `ml-registration`
+- Hynix AI Studio registration or model handoff -> `ml-registration`
 - Training/job failure or dependency/path/resource error -> `ml-autofix`
 - Closed-network Python, wheel, CUDA, or environment setup -> `offline-ml-env`
 - Add or verify MLflow tracing -> `mlflow-tracing`

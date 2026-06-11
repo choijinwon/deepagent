@@ -94,6 +94,14 @@ def registration_package_dir() -> Path:
     return Path(os.getenv("REGISTRATION_PACKAGE_DIR", "registration_packages")).resolve()
 
 
+def ai_studio_name() -> str:
+    return os.getenv("AI_STUDIO_NAME", "Hynix AI Studio")
+
+
+def env_value(primary: str, legacy: str, default: str = "") -> str:
+    return os.getenv(primary) or os.getenv(legacy) or default
+
+
 def now_text() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -236,9 +244,9 @@ def choose_primary_framework(frameworks: list[str]) -> str:
 def recommend_resources(frameworks: list[str], files: list[Path]) -> dict[str, Any]:
     primary = choose_primary_framework(frameworks)
     profile = FRAMEWORK_PROFILES.get(primary, FRAMEWORK_PROFILES["legacy-script"])
-    gpu = int(os.getenv("ML_PLATFORM_DEFAULT_GPU", str(profile["gpu"])) or profile["gpu"])
-    cpu = int(os.getenv("ML_PLATFORM_DEFAULT_CPU", str(profile["cpu"])) or profile["cpu"])
-    memory = os.getenv("ML_PLATFORM_DEFAULT_MEMORY", profile["memory"]) or profile["memory"]
+    gpu = int(env_value("AI_STUDIO_DEFAULT_GPU", "ML_PLATFORM_DEFAULT_GPU", str(profile["gpu"])) or profile["gpu"])
+    cpu = int(env_value("AI_STUDIO_DEFAULT_CPU", "ML_PLATFORM_DEFAULT_CPU", str(profile["cpu"])) or profile["cpu"])
+    memory = env_value("AI_STUDIO_DEFAULT_MEMORY", "ML_PLATFORM_DEFAULT_MEMORY", profile["memory"]) or profile["memory"]
     model_size_bytes = sum(path.stat().st_size for path in files if path.suffix.lower() in MODEL_SUFFIXES)
     notes = [profile["execution_hint"]]
     if model_size_bytes > 5 * 1024 * 1024 * 1024:
@@ -251,7 +259,7 @@ def recommend_resources(frameworks: list[str], files: list[Path]) -> dict[str, A
         "gpu": gpu,
         "cpu": cpu,
         "memory": memory,
-        "queue": os.getenv("ML_PLATFORM_DEFAULT_QUEUE", ""),
+        "queue": env_value("AI_STUDIO_DEFAULT_QUEUE", "ML_PLATFORM_DEFAULT_QUEUE", ""),
         "notes": notes,
     }
 
@@ -357,8 +365,8 @@ def build_registration_readiness(project_root: Path, files: list[Path], profile:
     checks.append(
         check_result(
             "pass" if job.get("queue") else "warn",
-            "Platform Queue",
-            job.get("queue") or "ML_PLATFORM_DEFAULT_QUEUE가 비어 있습니다.",
+            f"{ai_studio_name()} Queue",
+            job.get("queue") or "AI_STUDIO_DEFAULT_QUEUE 또는 ML_PLATFORM_DEFAULT_QUEUE가 비어 있습니다.",
             10,
         )
     )
@@ -462,7 +470,7 @@ def find_files_by_suffix(project_root: Path, files: list[Path], suffixes: set[st
 
 
 def infer_python_version() -> str:
-    return os.getenv("ML_PLATFORM_PYTHON_VERSION", "3.11")
+    return env_value("AI_STUDIO_PYTHON_VERSION", "ML_PLATFORM_PYTHON_VERSION", "3.11")
 
 
 def scan_project(project_path: str) -> dict[str, Any]:
@@ -569,7 +577,7 @@ def save_registration_profile(profile: dict[str, Any]) -> tuple[Path, Path]:
 
 def render_registration_report(profile: dict[str, Any]) -> str:
     lines = [
-        f"# ML Platform Registration Report - {profile['project_name']}",
+        f"# {ai_studio_name()} Registration Report - {profile['project_name']}",
         "",
         f"- Scanned: {profile['scanned_at']}",
         f"- Project Path: {profile['project_path']}",
@@ -757,13 +765,13 @@ def render_registered_readme(profile: dict[str, Any]) -> str:
         [
             f"# Registered Workspace - {profile['project_name']}",
             "",
-            "이 폴더는 ML Platform 등록을 위해 자동 생성된 표준 구조입니다.",
+            f"이 폴더는 {ai_studio_name()} 등록을 위해 자동 생성된 표준 구조입니다.",
             "원본 프로젝트는 수정하지 않습니다.",
             "",
             "## Files",
             "",
             "- `mlflow_config.yaml`: MLFlow 설정 초안",
-            "- `job_template.yaml`: ML Platform Job Template 초안",
+            f"- `job_template.yaml`: {ai_studio_name()} Job Template 초안",
             "- `entrypoint.py`: 원본 학습 스크립트를 호출하는 래퍼",
             "- `run_train.ps1`: Windows PowerShell 실행 확인 스크립트",
             "- `requirements.lock.txt`: 감지된 requirements 복사본 또는 후보 목록",
@@ -773,7 +781,7 @@ def render_registered_readme(profile: dict[str, Any]) -> str:
             "1. `mlflow_config.yaml`의 tracking URI를 확인합니다.",
             "2. `job_template.yaml`의 queue, image, CPU/GPU, memory를 확인합니다.",
             "3. `python entrypoint.py`로 로컬 실행 가능성을 확인합니다.",
-            "4. 내부 ML Platform API 스펙이 확정되면 등록 Tool과 연결합니다.",
+            f"4. 내부 {ai_studio_name()} API 스펙이 확정되면 등록 Tool과 연결합니다.",
             "",
             "## Auto Detected Profile",
             "",

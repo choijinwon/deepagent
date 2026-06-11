@@ -479,7 +479,7 @@ def run_registration_wizard_console() -> None:
     except Exception as exc:
         print(f"등록 위자드 실패: {exc}")
         return
-    print_markdown_result("ML Platform 등록 위자드", summary, border_style="cyan")
+    print_markdown_result("Hynix AI Studio 등록 위자드", summary, border_style="cyan")
     print_status_line(f"등록 위자드 완료: {profile.get('project_name')}", "green")
 
 
@@ -516,7 +516,7 @@ def main() -> None:
         print("16. 수정 후보 패치 승인 적용")
         print("17. 테스트 재실행")
         print("18. 개발 세션 복구")
-        print("19. ML Platform 등록 위자드")
+        print("19. Hynix AI Studio 등록 위자드")
         print("0. 종료")
 
         choice = input("\n선택: ").strip()

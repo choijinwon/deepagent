@@ -6,6 +6,7 @@ from typing import Any
 from dotenv import load_dotenv
 
 from registration_common import (
+    ai_studio_name,
     create_registration_package_from_profile,
     render_registration_report,
     save_registration_profile,
@@ -98,7 +99,10 @@ def fill_required_fields(profile: dict[str, Any]) -> dict[str, Any]:
     mlflow["tracking_uri"] = ask_value("MLFlow Tracking URI", mlflow.get("tracking_uri") or os.getenv("MLFLOW_TRACKING_URI", ""))
     mlflow["experiment_name"] = ask_value("MLFlow Experiment 이름", mlflow.get("experiment_name") or profile.get("project_name", "experiment"))
 
-    job["queue"] = ask_value("ML Platform Queue", job.get("queue") or os.getenv("ML_PLATFORM_DEFAULT_QUEUE", ""))
+    job["queue"] = ask_value(
+        f"{ai_studio_name()} Queue",
+        job.get("queue") or os.getenv("AI_STUDIO_DEFAULT_QUEUE") or os.getenv("ML_PLATFORM_DEFAULT_QUEUE", ""),
+    )
     job["arguments"] = ask_value("학습 실행 Arguments", job.get("arguments") or execution.get("arguments", ""))
     execution["arguments"] = job["arguments"]
 
@@ -106,7 +110,7 @@ def fill_required_fields(profile: dict[str, Any]) -> dict[str, Any]:
     job["gpu"] = ask_int("GPU 개수", int(job.get("gpu") or 0))
     job["memory"] = ask_value("Memory", str(job.get("memory") or "16Gi"))
 
-    image = ask_value("Platform Image 이름(모르면 비워두세요)", str(job.get("image") or ""))
+    image = ask_value(f"{ai_studio_name()} Image 이름(모르면 비워두세요)", str(job.get("image") or ""))
     if image:
         job["image"] = image
 
@@ -124,7 +128,7 @@ def fill_required_fields(profile: dict[str, Any]) -> dict[str, Any]:
 def render_wizard_summary(result: dict[str, Any] | None, profile: dict[str, Any]) -> str:
     readiness = profile.get("readiness", {})
     lines = [
-        "# ML Platform 등록 위자드 결과",
+        f"# {ai_studio_name()} 등록 위자드 결과",
         "",
         f"- Project: {profile.get('project_name')}",
         f"- Project Type: {profile.get('project_type')}",
@@ -142,7 +146,7 @@ def render_wizard_summary(result: dict[str, Any] | None, profile: dict[str, Any]
         lines.append("- 미리보기 모드라 파일을 생성하지 않았습니다.")
     lines.extend(["", "## 다음 단계", ""])
     if readiness.get("level") == "ready":
-        lines.append("- 등록 패키지를 플랫폼팀 또는 내부 포털에 전달할 수 있습니다.")
+        lines.append(f"- 등록 패키지를 {ai_studio_name()} 담당자 또는 내부 포털에 전달할 수 있습니다.")
     else:
         lines.append("- 점검표의 [주의]/[오류] 항목을 먼저 보완하세요.")
     lines.append("- Job 실행 오류가 나면 `/register fix-log <로그파일>`로 Auto Fix 리포트를 생성하세요.")
@@ -166,7 +170,7 @@ def run_registration_wizard(*, write_files: bool = True, create_package: bool = 
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="deepagent-register-wizard", description="질문에 답하면서 ML Platform 등록 산출물을 생성합니다.")
+    parser = argparse.ArgumentParser(prog="deepagent-register-wizard", description=f"질문에 답하면서 {ai_studio_name()} 등록 산출물을 생성합니다.")
     parser.add_argument("--preview", action="store_true", help="실제 파일 생성 없이 점검표와 입력값만 확인합니다.")
     parser.add_argument("--no-package", action="store_true", help="zip 패키지는 만들지 않고 등록 workspace만 생성합니다.")
     return parser
