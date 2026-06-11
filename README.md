@@ -36,7 +36,12 @@ deepagent/
 │  ├─ vllm-ops-wiki/
 │  ├─ ml-registration/
 │  ├─ ml-autofix/
-│  └─ offline-ml-env/
+│  ├─ offline-ml-env/
+│  ├─ mlflow-agent/
+│  ├─ mlflow-tracing/
+│  ├─ mlflow-agent-evaluation/
+│  ├─ mlflow-trace-debug/
+│  └─ mlflow-metrics/
 ├─ tools/
 │  └─ README.md
 ├─ requirements.txt
@@ -329,13 +334,19 @@ agent.invoke({
 - `ml-registration`: ML 개발자가 매뉴얼 없이 플랫폼 등록 플로우를 따라가도록 안내
 - `ml-autofix`: 학습 Job, MLflow, 의존성, 경로, GPU 메모리 오류 분석과 수정 계획 생성
 - `offline-ml-env`: 폐쇄망 ML 개발환경, 오프라인 wheel 번들, Python/CUDA 호환성 점검
+- `mlflow-agent`: MLflow 요청을 tracing/evaluation/debug/metrics/registration 스킬로 라우팅
+- `mlflow-tracing`: 내부 AI Agent/LLM 앱에 MLflow tracing을 적용하고 검증
+- `mlflow-agent-evaluation`: tracing 기반 Agent 평가, dry run, scorer, dataset 절차 안내
+- `mlflow-trace-debug`: trace/span/chat session 증거 기반 원인 분석
+- `mlflow-metrics`: run, latency, token, quality, readiness metric 보고서 작성
 
-`ml-registration`, `ml-autofix`, `offline-ml-env` 스킬은 공개 공식 문서의 일반 원칙을 참고해 폐쇄망용으로 정리했습니다.
-참고한 기준은 MLflow Tracking/Model Registry의 run, experiment, model version, lineage 개념과 Kubernetes resource request/limit 개념입니다.
+`ml-registration`, `ml-autofix`, `offline-ml-env`, `mlflow-*` 스킬은 공개 공식 문서와 `mlflow/skills` 저장소의 skill 라우팅/관측/평가/디버깅 패턴을 참고해 폐쇄망용으로 정리했습니다.
+참고한 기준은 MLflow Tracking/Model Registry의 run, experiment, model version, lineage, trace/evaluation 개념과 Kubernetes resource request/limit 개념입니다.
 내부 ML Platform 매뉴얼이나 Job Template 스키마가 제공되면 내부 기준을 우선합니다.
 
 참고 공식 문서:
 
+- MLflow Skills: https://github.com/mlflow/skills
 - MLflow Tracking: https://mlflow.org/docs/latest/ml/tracking/
 - MLflow Model Registry: https://mlflow.org/docs/latest/ml/model-registry/
 - Kubernetes Resource Management: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/

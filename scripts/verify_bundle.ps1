@@ -43,7 +43,12 @@ $RequiredProjectFiles = @(
     "skills/vllm-ops-wiki/SKILL.md",
     "skills/ml-registration/SKILL.md",
     "skills/ml-autofix/SKILL.md",
-    "skills/offline-ml-env/SKILL.md"
+    "skills/offline-ml-env/SKILL.md",
+    "skills/mlflow-agent/SKILL.md",
+    "skills/mlflow-tracing/SKILL.md",
+    "skills/mlflow-agent-evaluation/SKILL.md",
+    "skills/mlflow-trace-debug/SKILL.md",
+    "skills/mlflow-metrics/SKILL.md"
 )
 
 $Missing = @()
