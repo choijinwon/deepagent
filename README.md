@@ -33,7 +33,10 @@ deepagent/
 ├─ skills/
 │  ├─ security-report/
 │  ├─ access-audit/
-│  └─ vllm-ops-wiki/
+│  ├─ vllm-ops-wiki/
+│  ├─ ml-registration/
+│  ├─ ml-autofix/
+│  └─ offline-ml-env/
 ├─ tools/
 │  └─ README.md
 ├─ requirements.txt
@@ -317,6 +320,25 @@ agent.invoke({
     "files": get_harness_skill_files(),
 })
 ```
+
+포함된 하네스 스킬:
+
+- `security-report`: 보안 점검 보고서/TODO/checklist 작성
+- `access-audit`: 접근권한 점검과 권한 회수 검토
+- `vllm-ops-wiki`: vLLM/Qwen 운영 기록을 위키 Markdown으로 정리
+- `ml-registration`: ML 개발자가 매뉴얼 없이 플랫폼 등록 플로우를 따라가도록 안내
+- `ml-autofix`: 학습 Job, MLflow, 의존성, 경로, GPU 메모리 오류 분석과 수정 계획 생성
+- `offline-ml-env`: 폐쇄망 ML 개발환경, 오프라인 wheel 번들, Python/CUDA 호환성 점검
+
+`ml-registration`, `ml-autofix`, `offline-ml-env` 스킬은 공개 공식 문서의 일반 원칙을 참고해 폐쇄망용으로 정리했습니다.
+참고한 기준은 MLflow Tracking/Model Registry의 run, experiment, model version, lineage 개념과 Kubernetes resource request/limit 개념입니다.
+내부 ML Platform 매뉴얼이나 Job Template 스키마가 제공되면 내부 기준을 우선합니다.
+
+참고 공식 문서:
+
+- MLflow Tracking: https://mlflow.org/docs/latest/ml/tracking/
+- MLflow Model Registry: https://mlflow.org/docs/latest/ml/model-registry/
+- Kubernetes Resource Management: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
 
 ## 7. 웹으로 실행
 

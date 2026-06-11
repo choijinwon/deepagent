@@ -40,7 +40,10 @@ $RequiredProjectFiles = @(
     "scripts/verify_bundle.ps1",
     "skills/security-report/SKILL.md",
     "skills/access-audit/SKILL.md",
-    "skills/vllm-ops-wiki/SKILL.md"
+    "skills/vllm-ops-wiki/SKILL.md",
+    "skills/ml-registration/SKILL.md",
+    "skills/ml-autofix/SKILL.md",
+    "skills/offline-ml-env/SKILL.md"
 )
 
 $Missing = @()
