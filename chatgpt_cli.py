@@ -228,7 +228,7 @@ class PromptQueueRunner:
             try:
                 self.runtime["run_chat_interactive"](self.cache, self.state, prompt)
             except Exception as exc:
-                error_path = save_chat_error(exc, prompt, self.state)
+                error_path = getattr(exc, "chat_error_path", None) or save_chat_error(exc, prompt, self.state)
                 self.runtime["last_error_path"] = error_path
                 print_status_line(f"실행 실패: {exc}", "red")
                 print_status_line(f"에러 로그 저장: {error_path}", "yellow")

@@ -540,6 +540,7 @@ deepagent-chat
 /load <name>          저장된 프롬프트를 불러와 바로 실행
 /save <name>          마지막 사용자 프롬프트 저장
 /clear                대화 메모리 초기화
+/last-error           마지막 chat_cli 에러 로그 보기
 /test                 선택 모델 연결 테스트
 /paste                여러 줄 프롬프트 입력
 /folder               현재 작업 폴더 보기

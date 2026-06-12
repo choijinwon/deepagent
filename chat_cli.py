@@ -1,4 +1,5 @@
 import os
+import traceback
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -82,6 +83,7 @@ Commands
   /load <name>          Load a saved prompt into chat
   /save <name>          Save the last user prompt
   /clear                Clear chat memory
+  /last-error           Show the latest chat error traceback
   /test                 Test selected model connection
   /folder               Show current workspace folder
   /folder <path>        Set workspace folder
@@ -273,6 +275,59 @@ def wrap_print(text: str) -> None:
     print_markdown_result("assistant", text)
 
 
+def chat_error_dir() -> Path:
+    return Path(os.getenv("CHAT_ERROR_DIR", "chat_errors")).resolve()
+
+
+def save_chat_error(exc: Exception, prompt: str, state: ChatState) -> Path:
+    root = chat_error_dir()
+    root.mkdir(parents=True, exist_ok=True)
+    path = root / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-chat-cli-error.md"
+    content = "\n".join(
+        [
+            "# DeepAgent Chat CLI Error",
+            "",
+            f"- Created: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            f"- Model: {state.model_name}",
+            f"- Workspace: {state.workspace_dir}",
+            f"- Multi Agent: {state.enable_multi_agent}",
+            f"- Harness Skills: {harness_skills_enabled()}",
+            "",
+            "## Prompt",
+            "",
+            "```text",
+            prompt,
+            "```",
+            "",
+            "## Error",
+            "",
+            "```text",
+            str(exc),
+            "```",
+            "",
+            "## Traceback",
+            "",
+            "```text",
+            traceback.format_exc(),
+            "```",
+            "",
+        ]
+    )
+    path.write_text(content, encoding="utf-8")
+    setattr(exc, "chat_error_path", path)
+    return path
+
+
+def show_last_error() -> None:
+    root = chat_error_dir()
+    logs = sorted(root.glob("*-chat-cli-error.md")) if root.exists() else []
+    if not logs:
+        print_status_line("저장된 chat_cli 에러 로그가 없습니다.", "yellow")
+        return
+    path = logs[-1]
+    print_markdown_result(f"Last Chat CLI Error - {path.name}", path.read_text(encoding="utf-8"), border_style="red")
+
+
 def invoke_chat(
     cache: ChatAgentCache,
     state: ChatState,
@@ -309,21 +364,27 @@ def invoke_chat(
             return
         stream_view.append(delta)
 
-    if stream_to_console:
-        with stream_view:
+    try:
+        if stream_to_console:
+            with stream_view:
+                result, streamed = invoke_agent_text(
+                    agent,
+                    request,
+                    on_delta=print_delta,
+                    on_status=print_status,
+                )
+        else:
             result, streamed = invoke_agent_text(
                 agent,
                 request,
-                on_delta=print_delta,
+                on_delta=None,
                 on_status=print_status,
             )
-    else:
-        result, streamed = invoke_agent_text(
-            agent,
-            request,
-            on_delta=None,
-            on_status=print_status,
-        )
+    except Exception as exc:
+        error_path = save_chat_error(exc, prompt, state)
+        print_status_line(f"[error] 에러 로그 저장: {error_path}", "yellow")
+        print_status_line("[error] 마지막 에러를 보려면 `/last-error`를 입력하세요.", "yellow")
+        raise
     if stream_to_console:
         if not streamed:
             print_markdown_result("assistant", result)
@@ -1434,6 +1495,8 @@ def handle_command(command: str, cache: ChatAgentCache, state: ChatState) -> boo
     elif name == "/clear":
         state.messages.clear()
         print("Chat memory cleared.")
+    elif name == "/last-error":
+        show_last_error()
     elif name == "/test":
         test_model(cache, state)
     elif name == "/folder":
