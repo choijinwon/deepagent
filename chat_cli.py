@@ -21,6 +21,7 @@ from dev_common import (
     suggest_development_commands,
 )
 from doctor import run_doctor
+from env_common import load_project_env
 from fix_wizard import render_wizard_result, run_fix_wizard
 from ml_common import (
     ensure_model_catalog,
@@ -1556,6 +1557,7 @@ def handle_command(command: str, cache: ChatAgentCache, state: ChatState) -> boo
 
 
 def main() -> None:
+    load_project_env()
     state = ChatState(
         model_name=get_default_model(),
         enable_multi_agent=os.getenv("ENABLE_MULTI_AGENT", "true").lower() in ("1", "true", "yes", "y"),
