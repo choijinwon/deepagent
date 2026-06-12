@@ -1151,64 +1151,103 @@ HTML = """<!doctype html>
 def format_agent_result(result) -> str:
     if isinstance(result, dict) and "messages" in result:
         messages = result["messages"]
-        if messages:
-            last_message = messages[-1]
-            if isinstance(last_message, dict) and last_message.get("content"):
-                return stringify_message_content(last_message["content"])
-            content = getattr(last_message, "content", None)
-            if content:
-                return stringify_message_content(content)
+        text = extract_message_text(messages)
+        if text:
+            return text
     return str(result)
 
 
 def stringify_message_content(content) -> str:
+    if content is None:
+        return ""
     if isinstance(content, str):
         return content
-    if isinstance(content, list):
+    if isinstance(content, bytes):
+        return content.decode("utf-8", errors="ignore")
+    if isinstance(content, (list, tuple)):
         parts = []
         for item in content:
-            if isinstance(item, dict):
-                text = item.get("text") or item.get("content") or item.get("value")
-                if text:
-                    parts.append(str(text))
-            elif item:
-                parts.append(str(item))
+            text = stringify_message_content(item)
+            if text:
+                parts.append(text)
         return "\n".join(parts)
+    if isinstance(content, dict):
+        for key in ("text", "content", "value", "message", "delta"):
+            if key in content:
+                text = stringify_message_content(content.get(key))
+                if text:
+                    return text
+        return ""
     return str(content)
+
+
+def extract_message_text(message, depth: int = 0) -> str:
+    if depth > 4 or message is None:
+        return ""
+    if isinstance(message, (str, bytes)):
+        return stringify_message_content(message)
+    if isinstance(message, (list, tuple)):
+        for item in reversed(message):
+            text = extract_message_text(item, depth + 1)
+            if text:
+                return text
+        return ""
+    if isinstance(message, dict):
+        for key in ("content", "text", "delta", "value", "message"):
+            if key in message:
+                text = stringify_message_content(message.get(key))
+                if text:
+                    return text
+        for key in ("messages", "output", "data"):
+            if key in message:
+                text = extract_message_text(message.get(key), depth + 1)
+                if text:
+                    return text
+        return ""
+    content = getattr(message, "content", None)
+    if content is not None:
+        text = stringify_message_content(content)
+        if text:
+            return text
+    text = getattr(message, "text", None)
+    if text is not None:
+        return stringify_message_content(text)
+    return ""
 
 
 def extract_stream_text(chunk, depth: int = 0) -> str:
     if depth > 4:
         return ""
-    if isinstance(chunk, str):
-        return chunk
-    content = getattr(chunk, "content", None)
-    if isinstance(content, str):
-        return content
-    if isinstance(chunk, list):
+    if isinstance(chunk, (str, bytes)):
+        return stringify_message_content(chunk)
+    if isinstance(chunk, (list, tuple)):
         for item in reversed(chunk):
             text = extract_stream_text(item, depth + 1)
             if text:
                 return text
         return ""
     if isinstance(chunk, dict):
-        for key in ("content", "delta", "text"):
-            value = chunk.get(key)
-            if isinstance(value, str):
-                return value
-        messages = chunk.get("messages")
-        if isinstance(messages, list) and messages:
-            last_message = messages[-1]
-            if isinstance(last_message, dict) and isinstance(last_message.get("content"), str):
-                return last_message["content"]
-            message_content = getattr(last_message, "content", None)
-            if isinstance(message_content, str):
-                return message_content
+        for key in ("content", "delta", "text", "value", "message"):
+            if key in chunk:
+                text = stringify_message_content(chunk.get(key))
+                if text:
+                    return text
+        for key in ("messages", "output", "data"):
+            if key in chunk:
+                text = extract_message_text(chunk.get(key), depth + 1)
+                if text:
+                    return text
         for value in chunk.values():
-            if isinstance(value, (dict, list)):
+            if isinstance(value, (dict, list, tuple)):
                 text = extract_stream_text(value, depth + 1)
                 if text:
                     return text
+        return ""
+    content = getattr(chunk, "content", None)
+    if content is not None:
+        text = stringify_message_content(content)
+        if text:
+            return text
     return ""
 
 
