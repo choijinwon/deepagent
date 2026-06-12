@@ -36,6 +36,8 @@ Copy-Item -Force (Join-Path $Root "chat_cli.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "chatgpt_cli.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "launcher_cli.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "dev_common.py") $BundleProjectDir
+Copy-Item -Force (Join-Path $Root "env_common.py") $BundleProjectDir
+Copy-Item -Force (Join-Path $Root "env_cli.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "doctor.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "fix_wizard.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "project_wizard.py") $BundleProjectDir

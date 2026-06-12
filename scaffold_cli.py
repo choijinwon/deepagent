@@ -3,8 +3,7 @@ import os
 import sys
 from pathlib import Path
 
-from dotenv import load_dotenv
-
+from env_common import load_project_env
 from ops_common import session_dir
 from scaffold_common import (
     SCAFFOLD_SAMPLE,
@@ -48,7 +47,7 @@ def run_scaffold(text: str, *, write_files: bool) -> int:
         print_status_line("입력된 아이디어가 비어 있습니다.", "red")
         return 1
 
-    load_dotenv()
+    load_project_env()
     workspace_dir = Path(os.getenv("CHAT_WORKSPACE_DIR", "agent_workspace")).resolve()
     plan_dir = Path(os.getenv("PLAN_DIR", "plans")).resolve()
     enable_multi_agent = os.getenv("ENABLE_MULTI_AGENT", "true").lower() in ("1", "true", "yes", "y")

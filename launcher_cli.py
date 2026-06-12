@@ -14,8 +14,9 @@ MENU = [
     ("6", "scaffold", "아이디어로 폴더/파일 생성", "deepagent-scaffold", "scaffold_cli"),
     ("7", "register", "AI Studio 등록 위자드", "deepagent-register-wizard", "registration_wizard"),
     ("8", "fix", "AI Studio 오류수정 위자드", "deepagent-fix-wizard", "fix_wizard"),
-    ("9", "doctor", "폐쇄망 환경 진단", "deepagent-doctor", "doctor"),
-    ("10", "run", "기본 단발 실행 테스트", "deepagent-run", "app_closed"),
+    ("9", "env", ".env 생성/경로 확인", "deepagent-env", "env_cli"),
+    ("10", "doctor", "폐쇄망 환경 진단", "deepagent-doctor", "doctor"),
+    ("11", "run", "기본 단발 실행 테스트", "deepagent-run", "app_closed"),
 ]
 
 ONBOARDING = [
@@ -38,7 +39,7 @@ ONBOARDING = [
         "env",
         "폐쇄망 Python/ML 환경을 점검하고 싶어요",
         "doctor",
-        ".env, Qwen/vLLM, 필수 패키지, 내부 API 연결 상태 진단",
+        ".env 생성/경로 확인, Qwen/vLLM, 필수 패키지, 내부 API 연결 상태 진단",
     ),
     (
         "4",
@@ -156,6 +157,8 @@ def dispatch(module_name: str) -> None:
         from fix_wizard import main
     elif module_name == "doctor":
         from doctor import main
+    elif module_name == "env_cli":
+        from env_cli import main
     elif module_name == "app_closed":
         from app_closed import main
     else:

@@ -24,6 +24,8 @@ $RequiredProjectFiles = @(
     "chatgpt_cli.py",
     "launcher_cli.py",
     "dev_common.py",
+    "env_common.py",
+    "env_cli.py",
     "doctor.py",
     "fix_wizard.py",
     "project_wizard.py",

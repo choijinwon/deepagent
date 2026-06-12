@@ -8,8 +8,7 @@ from pathlib import Path
 from threading import Lock, Thread
 from typing import Any
 
-from dotenv import load_dotenv
-
+from env_common import load_project_env
 from ui_common import console, print_markdown_result, print_status_line, rich_enabled
 
 
@@ -267,7 +266,7 @@ def save_prompt_interactive(state: Any, runtime: dict[str, Any]) -> None:
 
 
 def main() -> None:
-    load_dotenv()
+    load_project_env()
     runtime = load_chat_runtime()
     state = runtime["ChatState"](
         model_name=runtime["get_default_model"](),

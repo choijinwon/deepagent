@@ -3,8 +3,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
-
+from env_common import load_project_env
 from registration_common import (
     ai_studio_name,
     create_registration_package_from_profile,
@@ -177,7 +176,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    load_dotenv()
+    load_project_env()
     args = build_parser().parse_args()
     profile, _, summary = run_registration_wizard(write_files=not args.preview, create_package=not args.no_package)
     print_markdown_result("Registration Wizard", summary, border_style="cyan")

@@ -21,6 +21,8 @@ deepagent/
 ├─ chatgpt_cli.py
 ├─ launcher_cli.py
 ├─ dev_common.py
+├─ env_common.py
+├─ env_cli.py
 ├─ doctor.py
 ├─ fix_wizard.py
 ├─ project_wizard.py
@@ -188,6 +190,7 @@ deepagent-fix-wizard # AI Studio 오류수정 위자드
 deepagent-console  # 메뉴형 콘솔 UI
 deepagent-web      # 웹 UI 실행
 deepagent-doctor   # 폐쇄망 환경 진단
+deepagent-env      # .env 생성 및 실제 경로 확인
 deepagent-run      # 기본 단발 실행 테스트
 deepagent-scaffold # 아이디어 붙여넣기로 폴더/파일 자동 생성
 ```
@@ -213,6 +216,19 @@ m. 전체 메뉴 보기
 
 ```powershell
 copy .env.example .env
+```
+
+파일이 보이지 않거나 실행 위치가 헷갈리면 아래 명령으로 자동 생성하고 실제 경로를 확인합니다.
+
+```powershell
+deepagent-env
+```
+
+Windows 11에서 파일 탐색기로 `.env`가 잘 보이지 않으면 PowerShell에서 아래처럼 열 수 있습니다.
+
+```powershell
+notepad .env
+dir -Force
 ```
 
 `.env` 파일의 값을 사내 Qwen 3.5 API 서버 정보에 맞게 수정합니다.

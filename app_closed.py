@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from deepagents import create_deep_agent
-from dotenv import load_dotenv
+from env_common import load_project_env
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 
@@ -14,7 +14,7 @@ SKILL_SOURCE = "/skills/"
 
 
 def get_available_models() -> list[str]:
-    load_dotenv()
+    load_project_env()
 
     raw_models = os.getenv("QWEN_MODELS", ",".join(DEFAULT_MODELS))
     models = [model.strip() for model in raw_models.split(",") if model.strip()]
@@ -25,12 +25,12 @@ def get_available_models() -> list[str]:
 
 
 def get_default_model() -> str:
-    load_dotenv()
+    load_project_env()
     return os.getenv("QWEN_MODEL") or get_available_models()[0]
 
 
 def deepagent_messages_mode() -> str:
-    load_dotenv()
+    load_project_env()
     mode = os.getenv("DEEPAGENT_MESSAGES_MODE", "string").strip().lower()
     return mode if mode in ("string", "list") else "string"
 
@@ -113,7 +113,7 @@ def invoke_agent_compatible(agent, messages: list[dict[str, str]] | list | str, 
 
 
 def build_qwen_llm(model_name: str | None = None) -> ChatOpenAI:
-    load_dotenv()
+    load_project_env()
 
     api_key = os.getenv("QWEN_API_KEY")
     base_url = os.getenv("QWEN_BASE_URL")
@@ -133,7 +133,7 @@ def build_qwen_llm(model_name: str | None = None) -> ChatOpenAI:
 
 
 def harness_skills_enabled() -> bool:
-    load_dotenv()
+    load_project_env()
     return os.getenv("ENABLE_HARNESS_SKILLS", "true").lower() in ("1", "true", "yes", "y")
 
 

@@ -19,6 +19,7 @@ deepagent-codex-chat = "chatgpt_cli:main"
 deepagent-console = "console_ui:main"
 deepagent-web = "web_closed:main"
 deepagent-doctor = "doctor:main"
+deepagent-env = "env_cli:main"
 deepagent-run = "app_closed:main"
 deepagent-scaffold = "scaffold_cli:main"
 deepagent-project = "project_wizard:main"
@@ -34,6 +35,8 @@ py-modules = [
   "console_ui",
   "dev_common",
   "doctor",
+  "env_cli",
+  "env_common",
   "fix_wizard",
   "launcher_cli",
   "ml_common",

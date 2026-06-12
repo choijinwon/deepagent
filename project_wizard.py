@@ -3,8 +3,7 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from dotenv import load_dotenv
-
+from env_common import load_project_env
 from ops_common import session_dir, slugify
 from scaffold_common import apply_scaffold, parse_scaffold_text, render_scaffold_summary
 from ui_common import print_markdown_result, print_status_line
@@ -292,7 +291,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    load_dotenv()
+    load_project_env()
     args = build_parser().parse_args()
     workspace_dir = Path(os.getenv("CHAT_WORKSPACE_DIR", "agent_workspace")).resolve()
     plan_dir = Path(os.getenv("PLAN_DIR", "plans")).resolve()

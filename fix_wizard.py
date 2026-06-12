@@ -1,10 +1,9 @@
 import argparse
 from pathlib import Path
 
-from dotenv import load_dotenv
-
 from autofix_common import analyze_log_file, render_fix_report, save_fix_report
 from dev_common import generate_patch_candidates, save_patch_candidates
+from env_common import load_project_env
 from ui_common import print_markdown_result, print_status_line
 
 
@@ -68,7 +67,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    load_dotenv()
+    load_project_env()
     args = build_parser().parse_args()
     try:
         report, fix_path, patch_path = run_fix_wizard(log_path=args.log_path, workspace_path=args.workspace)

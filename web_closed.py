@@ -36,10 +36,10 @@ from app_closed import (
     invoke_agent_compatible,
     is_message_format_error,
 )
-from dotenv import load_dotenv
+from env_common import load_project_env
 
 
-load_dotenv()
+load_project_env()
 
 HOST = os.getenv("WEB_HOST", "127.0.0.1")
 PORT = int(os.getenv("WEB_PORT", "8000"))

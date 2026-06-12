@@ -3,9 +3,8 @@ import os
 import sys
 import urllib.error
 import urllib.request
-from pathlib import Path
 
-from dotenv import load_dotenv
+from env_common import find_env_file, load_project_env
 
 
 REQUIRED_IMPORTS = [
@@ -47,8 +46,8 @@ def check_imports() -> list[str]:
 
 def check_env() -> list[str]:
     lines = ["## Environment"]
-    env_path = Path(".env")
-    lines.append(status_line(env_path.exists(), ".env file", str(env_path.resolve()) if env_path.exists() else "missing"))
+    env_path = find_env_file()
+    lines.append(status_line(env_path is not None, ".env file", str(env_path) if env_path else "missing"))
 
     api_key = os.getenv("QWEN_API_KEY", "")
     base_url = os.getenv("QWEN_BASE_URL", "")
@@ -105,7 +104,7 @@ def check_tool_calling_hint() -> list[str]:
 
 
 def run_doctor() -> list[str]:
-    load_dotenv()
+    load_project_env()
     lines = [
         "# DeepAgents Closed-Network Doctor",
         f"Python: {sys.version.split()[0]}",
