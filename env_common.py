@@ -1,4 +1,5 @@
 import shutil
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -18,9 +19,19 @@ PLACEHOLDER_VALUES = {
 
 def env_candidates(start: Path | None = None) -> list[Path]:
     roots = []
+    explicit = os.getenv("DEEPAGENT_ENV_FILE", "").strip()
+    if explicit:
+        explicit_path = Path(explicit).expanduser()
+        if explicit_path.is_file() or explicit_path.name == ".env":
+            roots.append(explicit_path.resolve().parent)
+        else:
+            roots.append(explicit_path.resolve())
     if start:
         roots.append(start.resolve())
-    roots.extend([Path.cwd().resolve(), PROJECT_ROOT])
+    cwd = Path.cwd().resolve()
+    roots.append(cwd)
+    roots.extend(cwd.parents)
+    roots.append(PROJECT_ROOT)
     for parent in PROJECT_ROOT.parents:
         roots.append(parent)
 
@@ -35,6 +46,13 @@ def env_candidates(start: Path | None = None) -> list[Path]:
 
 
 def find_env_file(start: Path | None = None) -> Path | None:
+    explicit = os.getenv("DEEPAGENT_ENV_FILE", "").strip()
+    if explicit:
+        explicit_path = Path(explicit).expanduser()
+        if explicit_path.is_dir():
+            explicit_path = explicit_path / ".env"
+        if explicit_path.exists() and explicit_path.is_file():
+            return explicit_path.resolve()
     for path in env_candidates(start):
         if path.exists() and path.is_file():
             return path
@@ -42,9 +60,18 @@ def find_env_file(start: Path | None = None) -> Path | None:
 
 
 def ensure_env_file() -> Path:
-    env_path = PROJECT_ROOT / ".env"
+    explicit = os.getenv("DEEPAGENT_ENV_FILE", "").strip()
+    if explicit:
+        env_path = Path(explicit).expanduser()
+        if env_path.is_dir():
+            env_path = env_path / ".env"
+        if not env_path.is_absolute():
+            env_path = (Path.cwd() / env_path).resolve()
+    else:
+        env_path = PROJECT_ROOT / ".env"
     if env_path.exists():
         return env_path
+    env_path.parent.mkdir(parents=True, exist_ok=True)
     example_path = PROJECT_ROOT / ".env.example"
     if not example_path.exists():
         env_path.write_text("", encoding="utf-8")

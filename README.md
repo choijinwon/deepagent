@@ -245,6 +245,20 @@ notepad .env
 dir -Force
 ```
 
+실행 위치 때문에 `.env`를 못 읽는 경우에는 경로를 명시할 수 있습니다.
+
+```powershell
+$env:DEEPAGENT_ENV_FILE="C:\work\deepagent\.env"
+deepagent-env show
+deepagent-chatgpt
+```
+
+현재 실제로 로드되는 `.env` 경로만 확인하려면 아래 명령을 사용합니다.
+
+```powershell
+deepagent-env path
+```
+
 `.env` 파일의 값을 사내 Qwen 3.5 API 서버 정보에 맞게 수정합니다.
 
 ```ini

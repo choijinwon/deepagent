@@ -34,6 +34,7 @@ def show_env() -> None:
     rows = [
         ("Path", str(env_path)),
         ("Created", "yes" if created else "no"),
+        ("Explicit", os.getenv("DEEPAGENT_ENV_FILE", "") or "not set"),
         ("Edit", "notepad .env"),
     ]
     rows.extend((key, masked(os.getenv(key, ""))) for key in ENV_KEYS)
@@ -89,10 +90,16 @@ def set_env_value(key: str, value: str) -> None:
     print_status_line(f"{key} 값을 저장했습니다: {env_path}", "green")
 
 
+def print_env_path() -> None:
+    env_path, _ = env_path_or_create()
+    print(str(env_path))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="deepagent-env", description=".env 파일을 생성하고 Qwen 설정을 확인/수정합니다.")
     subparsers = parser.add_subparsers(dest="command")
     subparsers.add_parser("show", help=".env 경로와 주요 설정 상태를 표시합니다.")
+    subparsers.add_parser("path", help="로드되는 .env 파일 경로만 출력합니다.")
     subparsers.add_parser("setup", help="질문형으로 QWEN_API_KEY, QWEN_BASE_URL, QWEN_MODEL을 설정합니다.")
     set_parser = subparsers.add_parser("set", help=".env 값을 하나 설정합니다.")
     set_parser.add_argument("key")
@@ -106,6 +113,8 @@ def main() -> None:
         setup_env()
     elif args.command == "set":
         set_env_value(args.key, args.value)
+    elif args.command == "path":
+        print_env_path()
     else:
         show_env()
 
