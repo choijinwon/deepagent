@@ -9,6 +9,9 @@ from dotenv import load_dotenv
 from ui_common import print_key_value_table, print_markdown_result, print_status_line
 
 
+EXIT_INPUTS = {"q", "0", "quit", "exit", "/q", "/quit", "/exit", "종료", "종료하기", "/종료", "/종료하기"}
+
+
 def load_chat_runtime() -> dict[str, Any]:
     try:
         from app_closed import get_default_model
@@ -53,7 +56,7 @@ def print_chatgpt_banner(state: Any) -> None:
                 "- 짧은 질문은 바로 입력하세요.",
                 "- 긴 프롬프트는 `p`를 누르고 여러 줄로 붙여넣으세요.",
                 "- 마지막 답변에 사용한 프롬프트는 `s`로 저장할 수 있습니다.",
-                "- 종료는 `q`입니다.",
+                "- 종료는 `q`, `0`, `종료하기` 중 하나를 입력하세요.",
             ]
         ),
         border_style="cyan",
@@ -68,7 +71,8 @@ def prompt_menu() -> str:
     print("s. 마지막 프롬프트 저장")
     print("c. 대화 초기화")
     print("h. 도움말")
-    print("q. 종료")
+    print("0. 종료하기")
+    print("q. 종료하기")
     return input("선택 또는 바로 질문 입력> ").strip()
 
 
@@ -101,7 +105,7 @@ def main() -> None:
         choice = prompt_menu()
         if not choice:
             continue
-        if choice.lower() in ("q", "quit", "exit"):
+        if choice.lower() in EXIT_INPUTS:
             print_status_line("종료합니다.", "dim")
             return
         if choice.lower() == "h":

@@ -1218,7 +1218,7 @@ def handle_command(command: str, cache: ChatAgentCache, state: ChatState) -> boo
     name = name.lower()
     args = args.strip()
 
-    if name in ("/exit", "/quit"):
+    if name in ("/exit", "/quit", "/종료", "/종료하기"):
         return False
     if name == "/help":
         print(HELP_TEXT)
