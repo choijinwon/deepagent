@@ -242,6 +242,7 @@ SESSION_DIR=sessions
 DEV_RUN_DIR=dev_runs
 DEV_SESSION_DIR=dev_sessions
 DEV_PATCH_DIR=dev_patches
+CHAT_ERROR_DIR=chat_errors
 DEV_COMMAND_TIMEOUT=120
 MASK_SENSITIVE_LOGS=true
 MODEL_CATALOG_PATH=model_catalog.json
@@ -506,7 +507,7 @@ deepagent-codex-chat
 메시지 입력> 서버 접근권한 보안 점검 TODO 만들어줘
 대기열 입력> 다음으로 실행할 프롬프트
 
-1 질문 | p 긴 프롬프트 | scan Root 스캔 | l 불러오기 | s 저장 | r 대기열 | x 비우기 | h 도움말 | q 종료
+1 질문 | p 긴 프롬프트 | scan Root 스캔 | l 불러오기 | s 저장 | r 대기열 | x 비우기 | e 에러 | h 도움말 | q 종료
 ```
 
 짧은 질문은 선택 번호 없이 바로 입력해도 전송됩니다.
@@ -514,6 +515,7 @@ deepagent-codex-chat
 `scan`을 입력하면 현재 `CHAT_WORKSPACE_DIR` Root 기준으로 텍스트 파일을 모두 스캔해 에이전트 컨텍스트에 첨부합니다.
 다른 폴더를 기준으로 스캔하려면 `scan C:\work\my-model`처럼 입력합니다.
 프롬프트가 실행 중일 때 새 프롬프트를 입력하면 즉시 중단하지 않고 대기열에 추가한 뒤, 현재 답변이 끝나면 순서대로 자동 실행합니다.
+챗봇 실행 중 에러가 나면 `CHAT_ERROR_DIR` 아래 Markdown 로그로 저장되며, `e` 또는 `/last-error`로 마지막 에러를 확인할 수 있습니다.
 채팅을 끝내려면 `0`, `q`, `종료`, `종료하기`, `/exit` 중 하나를 입력합니다.
 종료 시 현재 실행 중인 프롬프트는 안전하게 끝날 때까지 기다리고, 아직 실행되지 않은 대기열 프롬프트는 비웁니다.
 

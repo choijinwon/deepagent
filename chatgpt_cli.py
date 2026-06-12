@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import traceback
+from datetime import datetime
 from queue import Empty, Queue
 from pathlib import Path
 from threading import Lock, Thread
@@ -45,6 +47,7 @@ def load_chat_runtime() -> dict[str, Any]:
         "run_chat_interactive": run_chat_interactive,
         "save_last_prompt": save_last_prompt,
         "handle_scan_root_command": handle_scan_root_command,
+        "last_error_path": None,
     }
 
 
@@ -93,7 +96,7 @@ def print_chat_shell_header(state: Any) -> None:
 
 def print_command_bar(runner: "PromptQueueRunner") -> None:
     status = f"실행 중 · 대기 {runner.queue_size()}개" if runner.is_busy() else "대기 중"
-    commands = "1 질문 | p 긴 프롬프트 | scan Root 스캔 | l 불러오기 | s 저장 | r 대기열 | x 비우기 | h 도움말 | q 종료"
+    commands = "1 질문 | p 긴 프롬프트 | scan Root 스캔 | l 불러오기 | s 저장 | r 대기열 | x 비우기 | e 에러 | h 도움말 | q 종료"
     if rich_enabled():
         from rich.panel import Panel
 
@@ -123,6 +126,57 @@ def print_user_bubble(prompt: str, *, queued: bool) -> None:
     print("-" * 78)
     print(preview)
     print("-" * 78)
+
+
+def chat_error_dir() -> Path:
+    return Path(os.getenv("CHAT_ERROR_DIR", "chat_errors")).resolve()
+
+
+def save_chat_error(exc: Exception, prompt: str, state: Any) -> Path:
+    root = chat_error_dir()
+    root.mkdir(parents=True, exist_ok=True)
+    path = root / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-chat-error.md"
+    content = "\n".join(
+        [
+            "# DeepAgent Chat Error",
+            "",
+            f"- Created: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            f"- Model: {getattr(state, 'model_name', '')}",
+            f"- Workspace: {getattr(state, 'workspace_dir', '')}",
+            f"- Multi Agent: {getattr(state, 'enable_multi_agent', '')}",
+            "",
+            "## Prompt",
+            "",
+            "```text",
+            prompt,
+            "```",
+            "",
+            "## Error",
+            "",
+            "```text",
+            str(exc),
+            "```",
+            "",
+            "## Traceback",
+            "",
+            "```text",
+            traceback.format_exc(),
+            "```",
+            "",
+        ]
+    )
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+def show_last_error() -> None:
+    root = chat_error_dir()
+    logs = sorted(root.glob("*-chat-error.md")) if root.exists() else []
+    if not logs:
+        print_status_line("저장된 챗봇 에러 로그가 없습니다.", "yellow")
+        return
+    path = logs[-1]
+    print_markdown_result(f"Last Chat Error - {path.name}", path.read_text(encoding="utf-8"), border_style="red")
 
 
 class PromptQueueRunner:
@@ -174,7 +228,11 @@ class PromptQueueRunner:
             try:
                 self.runtime["run_chat_interactive"](self.cache, self.state, prompt)
             except Exception as exc:
+                error_path = save_chat_error(exc, prompt, self.state)
+                self.runtime["last_error_path"] = error_path
                 print_status_line(f"실행 실패: {exc}", "red")
+                print_status_line(f"에러 로그 저장: {error_path}", "yellow")
+                print_status_line("마지막 에러를 보려면 `e` 또는 `/last-error`를 입력하세요.", "yellow")
             finally:
                 self.queue.task_done()
 
@@ -253,6 +311,9 @@ def main() -> None:
         if choice.lower() == "x":
             cleared = runner.clear_pending()
             print_status_line(f"대기 중인 프롬프트 {cleared}개를 비웠습니다.", "yellow")
+            continue
+        if choice.lower() in ("e", "/last-error", "last-error", "에러"):
+            show_last_error()
             continue
         if choice.lower() == "s":
             save_prompt_interactive(state, runtime)

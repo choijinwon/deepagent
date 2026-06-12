@@ -24,6 +24,7 @@ sessions/
 dev_runs/
 dev_sessions/
 dev_patches/
+chat_errors/
 experiments/
 model_catalog.json
 model_catalog.md
