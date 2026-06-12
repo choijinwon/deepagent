@@ -42,6 +42,7 @@ $RequiredProjectFiles = @(
     "pyproject.toml",
     ".env.example",
     "scripts/install_offline.ps1",
+    "scripts/run_local.ps1",
     "scripts/verify_bundle.ps1",
     "skills/security-report/SKILL.md",
     "skills/access-audit/SKILL.md",

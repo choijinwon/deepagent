@@ -196,6 +196,22 @@ deepagent-run      # 기본 단발 실행 테스트
 deepagent-scaffold # 아이디어 붙여넣기로 폴더/파일 자동 생성
 ```
 
+만약 설치 전 소스 폴더에서 바로 실행하거나 `ModuleNotFoundError` 때문에 매번 `$env:PYTHONPATH='.'`를 입력해야 한다면 아래 실행기를 사용하세요.
+이 스크립트가 프로젝트 루트를 자동으로 `PYTHONPATH`에 넣고 실행합니다.
+
+```powershell
+.\scripts\run_local.ps1
+.\scripts\run_local.ps1 chat
+.\scripts\run_local.ps1 project
+```
+
+수동으로 처리해야 하는 경우에는 현재 PowerShell 창에서만 아래처럼 지정할 수 있습니다.
+
+```powershell
+$env:PYTHONPATH=(Get-Location).Path
+python launcher_cli.py
+```
+
 명령을 외우기 어렵다면 `deepagent`만 실행하세요.
 처음 사용하는 사람을 위한 목적 선택 화면이 먼저 뜹니다.
 
@@ -1083,6 +1099,15 @@ python -c "import langchain_openai; print('ok')"
 python -c "import deepagents; print('ok')"
 python -c "import rich; print('rich ok')"
 ```
+
+소스 폴더에서 바로 실행할 때 `ModuleNotFoundError`가 나면 먼저 아래 명령을 사용하세요.
+
+```powershell
+.\scripts\run_local.ps1
+```
+
+원인은 현재 프로젝트 폴더가 Python 모듈 검색 경로에 들어가지 않은 것입니다.
+권장 해결은 `.\scripts\install_offline.ps1`로 `deepagent` 명령을 등록하는 것이고, 임시 해결은 `$env:PYTHONPATH=(Get-Location).Path`입니다.
 
 Qwen 3.5 API 연결을 확인합니다.
 
