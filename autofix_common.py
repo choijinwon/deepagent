@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from ops_common import slugify
+from utils import file_date_string
 
 
 def fix_report_dir() -> Path:
@@ -216,6 +217,6 @@ def render_fix_report(report: dict[str, Any]) -> str:
 def save_fix_report(report: dict[str, Any]) -> Path:
     directory = fix_report_dir()
     directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{slugify(report['source'], 'log')}-fix-plan.md"
+    path = directory / f"{file_date_string()}-{slugify(report['source'], 'log')}-fix-plan.md"
     path.write_text(render_fix_report(report), encoding="utf-8")
     return path

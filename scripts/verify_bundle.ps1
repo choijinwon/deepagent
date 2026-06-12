@@ -37,6 +37,7 @@ $RequiredProjectFiles = @(
     "registration_wizard.py",
     "autofix_common.py",
     "ui_common.py",
+    "utils.py",
     "requirements.txt",
     "pyproject.toml",
     ".env.example",

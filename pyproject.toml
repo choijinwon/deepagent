@@ -47,5 +47,6 @@ py-modules = [
   "scaffold_cli",
   "scaffold_common",
   "ui_common",
+  "utils",
   "web_closed",
 ]

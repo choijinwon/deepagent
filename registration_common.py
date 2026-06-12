@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from ops_common import slugify
+from utils import file_date_string
 
 
 FRAMEWORK_HINTS = {
@@ -840,7 +841,7 @@ def create_registration_package_from_profile(profile: dict[str, Any]) -> dict[st
     workspace = Path(scaffold["workspace"])
     package_root = registration_package_dir()
     package_root.mkdir(parents=True, exist_ok=True)
-    package_path = package_root / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{project_slug}-registration-package.zip"
+    package_path = package_root / f"{file_date_string()}-{project_slug}-registration-package.zip"
     manifest = {
         "created_at": now_text(),
         "project_name": profile["project_name"],

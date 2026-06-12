@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from ops_common import slugify
+from utils import file_date_string
 
 
 @dataclass
@@ -343,7 +344,7 @@ def render_patch_candidates(candidates: list[DevPatchCandidate]) -> str:
 def save_patch_candidates(candidates: list[DevPatchCandidate], source_name: str) -> Path:
     directory = dev_patch_dir()
     directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"{datetime.now().strftime('%Y%m%d-%H%M%S')}-{slugify(source_name, 'patch')}.md"
+    path = directory / f"{file_date_string()}-{slugify(source_name, 'patch')}.md"
     path.write_text(render_patch_candidates(candidates), encoding="utf-8")
     return path
 

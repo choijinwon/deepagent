@@ -24,6 +24,7 @@ deepagent/
 ├─ env_common.py
 ├─ env_cli.py
 ├─ doctor.py
+├─ utils.py
 ├─ fix_wizard.py
 ├─ project_wizard.py
 ├─ ops_common.py
