@@ -61,13 +61,32 @@ def messages_to_transcript(messages: list[dict[str, str]] | list | str) -> str:
     return "\n\n".join(lines).strip()
 
 
-def build_agent_request(messages: list[dict[str, str]] | list | str, files: dict[str, str] | None = None) -> dict[str, Any]:
+def normalize_agent_files(files: dict[str, Any] | None) -> dict[str, dict[str, str]]:
+    normalized: dict[str, dict[str, str]] = {}
+    for path, file_data in (files or {}).items():
+        virtual_path = str(path)
+        if isinstance(file_data, dict):
+            content = file_data.get("content", "")
+            encoding = str(file_data.get("encoding") or "utf-8")
+        else:
+            content = file_data
+            encoding = "utf-8"
+        if isinstance(content, list):
+            content = "\n".join(str(line) for line in content)
+        normalized[virtual_path] = {
+            "content": str(content or ""),
+            "encoding": encoding,
+        }
+    return normalized
+
+
+def build_agent_request(messages: list[dict[str, str]] | list | str, files: dict[str, Any] | None = None) -> dict[str, Any]:
     return build_agent_request_for_mode(messages, files, deepagent_messages_mode())
 
 
 def build_agent_request_for_mode(
     messages: list[dict[str, str]] | list | str,
-    files: dict[str, str] | None = None,
+    files: dict[str, Any] | None = None,
     mode: str = "string",
 ) -> dict[str, Any]:
     if mode == "list":
@@ -76,7 +95,7 @@ def build_agent_request_for_mode(
         request_messages = messages_to_transcript(messages)
     return {
         "messages": request_messages,
-        "files": files or {},
+        "files": normalize_agent_files(files),
     }
 
 
@@ -101,7 +120,7 @@ def build_alternate_agent_request(request: dict[str, Any]) -> dict[str, Any]:
     return build_agent_request_for_mode(messages, files, "string")
 
 
-def invoke_agent_compatible(agent, messages: list[dict[str, str]] | list | str, files: dict[str, str] | None = None):
+def invoke_agent_compatible(agent, messages: list[dict[str, str]] | list | str, files: dict[str, Any] | None = None):
     mode = deepagent_messages_mode()
     request = build_agent_request_for_mode(messages, files, mode)
     try:
