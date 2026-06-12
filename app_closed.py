@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from deepagents import create_deep_agent
-from env_common import load_project_env
+from env_common import is_placeholder_value, load_project_env
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 
@@ -119,10 +119,10 @@ def build_qwen_llm(model_name: str | None = None) -> ChatOpenAI:
     base_url = os.getenv("QWEN_BASE_URL")
     selected_model = model_name or get_default_model()
 
-    if not api_key:
-        raise ValueError("QWEN_API_KEY가 설정되지 않았습니다. .env 파일을 확인하세요.")
-    if not base_url:
-        raise ValueError("QWEN_BASE_URL이 설정되지 않았습니다. .env 파일을 확인하세요.")
+    if is_placeholder_value(api_key):
+        raise ValueError("QWEN_API_KEY가 비어 있거나 예시값입니다. `deepagent-env setup`으로 실제 API Key를 입력하세요.")
+    if is_placeholder_value(base_url):
+        raise ValueError("QWEN_BASE_URL이 비어 있거나 예시값입니다. `deepagent-env setup`으로 실제 /v1 주소를 입력하세요.")
 
     return ChatOpenAI(
         model=selected_model,

@@ -224,6 +224,20 @@ copy .env.example .env
 deepagent-env
 ```
 
+API Key가 비어 있다고 나오면 아래 명령으로 터미널에서 직접 값을 입력합니다.
+
+```powershell
+deepagent-env setup
+```
+
+한 값만 바로 바꾸려면 아래처럼 입력합니다.
+
+```powershell
+deepagent-env set QWEN_API_KEY your-real-api-key
+deepagent-env set QWEN_BASE_URL http://xxx.xxx.xxx.xxx:포트/v1
+deepagent-env set QWEN_MODEL qwen3.5
+```
+
 Windows 11에서 파일 탐색기로 `.env`가 잘 보이지 않으면 PowerShell에서 아래처럼 열 수 있습니다.
 
 ```powershell

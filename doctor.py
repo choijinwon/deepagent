@@ -3,8 +3,9 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 
-from env_common import find_env_file, load_project_env
+from env_common import find_env_file, is_placeholder_value, load_project_env
 
 
 REQUIRED_IMPORTS = [
@@ -54,8 +55,8 @@ def check_env() -> list[str]:
     model = os.getenv("QWEN_MODEL", "")
     models = os.getenv("QWEN_MODELS", "")
 
-    lines.append(status_line(bool(api_key), "QWEN_API_KEY", "configured" if api_key else "missing"))
-    lines.append(status_line(bool(base_url), "QWEN_BASE_URL", base_url or "missing"))
+    lines.append(status_line(not is_placeholder_value(api_key), "QWEN_API_KEY", "configured" if not is_placeholder_value(api_key) else "missing or placeholder"))
+    lines.append(status_line(not is_placeholder_value(base_url), "QWEN_BASE_URL", base_url if not is_placeholder_value(base_url) else "missing or placeholder"))
     lines.append(status_line(base_url.rstrip("/").endswith("/v1") if base_url else False, "QWEN_BASE_URL ends with /v1"))
     lines.append(status_line(bool(model), "QWEN_MODEL", model or "missing"))
     lines.append(status_line(bool(models), "QWEN_MODELS", models or "missing"))
