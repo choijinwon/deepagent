@@ -232,6 +232,9 @@ PROMPT_STORE_PATH=prompt_templates.json
 WIKI_LOG_DIR=wiki_logs
 WIKI_LOG_STYLE=vllm
 CHAT_WORKSPACE_DIR=agent_workspace
+ROOT_SCAN_FILE_LIMIT=300
+ROOT_SCAN_MAX_FILE_BYTES=200000
+ROOT_SCAN_TOTAL_BYTES=3000000
 PLAN_DIR=plans
 GOAL_DIR=goals
 SESSION_DIR=sessions
@@ -494,6 +497,7 @@ deepagent-codex-chat
 p. 긴 프롬프트 붙여넣기
 l. 저장 프롬프트 불러와 실행
 s. 마지막 프롬프트 저장
+scan. Root 폴더 모두 스캔
 r. 대기열 상태 보기
 x. 대기열 비우기
 c. 대화 초기화
@@ -502,6 +506,8 @@ q. 종료하기
 ```
 
 짧은 질문은 선택 번호 없이 바로 입력해도 전송됩니다.
+`scan`을 입력하면 현재 `CHAT_WORKSPACE_DIR` Root 기준으로 텍스트 파일을 모두 스캔해 에이전트 컨텍스트에 첨부합니다.
+다른 폴더를 기준으로 스캔하려면 `scan C:\work\my-model`처럼 입력합니다.
 프롬프트가 실행 중일 때 새 프롬프트를 입력하면 즉시 중단하지 않고 대기열에 추가한 뒤, 현재 답변이 끝나면 순서대로 자동 실행합니다.
 채팅을 끝내려면 `0`, `q`, `종료`, `종료하기`, `/exit` 중 하나를 입력합니다.
 종료 시 현재 실행 중인 프롬프트는 안전하게 끝날 때까지 기다리고, 아직 실행되지 않은 대기열 프롬프트는 비웁니다.
@@ -532,6 +538,7 @@ deepagent-chat
 /folder               현재 작업 폴더 보기
 /folder <path>        작업 폴더 설정
 /tree [depth]         작업 폴더 트리 보기
+/scan-root [path]     Root 폴더 기준 텍스트 파일 전체 스캔
 /read <path>          작업 폴더 파일 출력
 /write <path>         작업 폴더 파일 작성
 /add-file <path>      파일을 에이전트 컨텍스트에 첨부

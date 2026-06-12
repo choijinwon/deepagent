@@ -85,6 +85,7 @@ Commands
   /folder               Show current workspace folder
   /folder <path>        Set workspace folder
   /tree [depth]         Show workspace file tree
+  /scan-root [path]     Scan root folder and attach text files
   /read <path>          Print a workspace file
   /write <path>         Write a workspace file from pasted lines
   /add-file <path>      Attach a workspace file to agent context
@@ -144,6 +145,56 @@ Input
   Type a message and press Enter to send.
   For multi-line input, type /paste, enter lines, then finish with a single dot (.).
 """
+
+ROOT_SCAN_IGNORE_DIRS = {
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".tox",
+    ".idea",
+    ".vscode",
+    "node_modules",
+    "dist",
+    "build",
+    "offline_bundle",
+    "offline_packages",
+    "agent_workspace",
+    "dev_runs",
+    "dev_sessions",
+    "dev_patches",
+    "experiments",
+    "fix_reports",
+    "goals",
+    "plans",
+    "registrations",
+    "registration_packages",
+    "sessions",
+    "wiki_logs",
+}
+
+ROOT_SCAN_TEXT_SUFFIXES = {
+    ".bat",
+    ".cfg",
+    ".cmd",
+    ".csv",
+    ".env",
+    ".ini",
+    ".ipynb",
+    ".json",
+    ".log",
+    ".md",
+    ".ps1",
+    ".py",
+    ".sh",
+    ".toml",
+    ".txt",
+    ".yaml",
+    ".yml",
+}
 
 
 @dataclass
@@ -347,6 +398,146 @@ def show_tree(state: ChatState, args: str) -> None:
                 walk(entry, current_depth + 1, prefix + extension)
 
     walk(root, 1)
+
+
+def scan_root_limits() -> tuple[int, int, int]:
+    file_limit = int(os.getenv("ROOT_SCAN_FILE_LIMIT", "300"))
+    max_file_bytes = int(os.getenv("ROOT_SCAN_MAX_FILE_BYTES", "200000"))
+    total_bytes = int(os.getenv("ROOT_SCAN_TOTAL_BYTES", "3000000"))
+    return max(1, file_limit), max(1024, max_file_bytes), max(1024, total_bytes)
+
+
+def resolve_root_scan_path(state: ChatState, value: str) -> Path:
+    if not value or value == ".":
+        return state.workspace_dir.resolve()
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = state.workspace_dir / path
+    path = path.resolve()
+    if not path.exists() or not path.is_dir():
+        raise FileNotFoundError(f"root folder not found: {path}")
+    return path
+
+
+def is_root_scan_candidate(root: Path, path: Path, max_file_bytes: int) -> tuple[bool, str]:
+    try:
+        relative_parts = path.resolve().relative_to(root.resolve()).parts
+    except ValueError:
+        relative_parts = path.parts
+    if any(part in ROOT_SCAN_IGNORE_DIRS for part in relative_parts[:-1]):
+        return False, "ignored-dir"
+    if not path.is_file():
+        return False, "not-file"
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return False, "stat-failed"
+    if size <= 0:
+        return False, "empty"
+    if size > max_file_bytes:
+        return False, "too-large"
+    if path.name.lower() in ("requirements.txt", "dockerfile", ".env.example"):
+        return True, ""
+    if path.suffix.lower() not in ROOT_SCAN_TEXT_SUFFIXES:
+        return False, "unsupported-suffix"
+    try:
+        sample = path.read_bytes()[:4096]
+    except OSError:
+        return False, "read-failed"
+    if b"\x00" in sample:
+        return False, "binary"
+    return True, ""
+
+
+def root_scan_virtual_path(state: ChatState, root: Path, path: Path) -> str:
+    try:
+        workspace_relative = path.resolve().relative_to(state.workspace_dir.resolve())
+        return f"/workspace/{workspace_relative.as_posix()}"
+    except ValueError:
+        pass
+    try:
+        root_relative = path.resolve().relative_to(root.resolve())
+        return f"/root_scan/{root.name}/{root_relative.as_posix()}"
+    except ValueError:
+        return f"/workspace_external/{path.name}"
+
+
+def scan_root_into_context(state: ChatState, value: str = "") -> dict[str, object]:
+    root = resolve_root_scan_path(state, value.strip())
+    file_limit, max_file_bytes, total_limit = scan_root_limits()
+    attached = []
+    skipped: dict[str, int] = {}
+    total_bytes = 0
+
+    for path in sorted(root.rglob("*"), key=lambda item: item.as_posix().lower()):
+        if len(attached) >= file_limit:
+            skipped["file-limit"] = skipped.get("file-limit", 0) + 1
+            break
+        ok, reason = is_root_scan_candidate(root, path, max_file_bytes)
+        if not ok:
+            skipped[reason] = skipped.get(reason, 0) + 1
+            continue
+        size = path.stat().st_size
+        if total_bytes + size > total_limit:
+            skipped["total-limit"] = skipped.get("total-limit", 0) + 1
+            continue
+        try:
+            content = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            skipped["read-failed"] = skipped.get("read-failed", 0) + 1
+            continue
+        virtual_path = root_scan_virtual_path(state, root, path)
+        state.attached_files[virtual_path] = content
+        attached.append(virtual_path)
+        total_bytes += size
+
+    return {
+        "root": root.as_posix(),
+        "attached": attached,
+        "attached_count": len(attached),
+        "total_bytes": total_bytes,
+        "skipped": skipped,
+        "limits": {
+            "file_limit": file_limit,
+            "max_file_bytes": max_file_bytes,
+            "total_bytes": total_limit,
+        },
+    }
+
+
+def render_root_scan_result(result: dict[str, object]) -> str:
+    attached = list(result.get("attached") or [])
+    skipped = dict(result.get("skipped") or {})
+    limits = dict(result.get("limits") or {})
+    lines = [
+        "# Root Scan Result",
+        "",
+        f"- Root: {result.get('root')}",
+        f"- Attached Files: {result.get('attached_count')}",
+        f"- Attached Bytes: {result.get('total_bytes')}",
+        f"- File Limit: {limits.get('file_limit')}",
+        f"- Max File Bytes: {limits.get('max_file_bytes')}",
+        f"- Total Bytes Limit: {limits.get('total_bytes')}",
+        "",
+        "## Attached",
+        "",
+    ]
+    lines.extend([f"- {path}" for path in attached[:80]] or ["- none"])
+    if len(attached) > 80:
+        lines.append(f"- ... and {len(attached) - 80} more")
+    lines.extend(["", "## Skipped", ""])
+    lines.extend([f"- {reason}: {count}" for reason, count in sorted(skipped.items())] or ["- none"])
+    lines.append("")
+    return "\n".join(lines)
+
+
+def handle_scan_root_command(state: ChatState, args: str) -> None:
+    try:
+        result = scan_root_into_context(state, args)
+    except Exception as exc:
+        print(f"Root scan failed: {exc}")
+        return
+    print_markdown_result("Root Scan", render_root_scan_result(result), border_style="cyan")
 
 
 def read_workspace_file(state: ChatState, args: str) -> None:
@@ -1251,6 +1442,8 @@ def handle_command(command: str, cache: ChatAgentCache, state: ChatState) -> boo
         set_workspace(state, args)
     elif name == "/tree":
         show_tree(state, args)
+    elif name == "/scan-root":
+        handle_scan_root_command(state, args)
     elif name == "/read":
         read_workspace_file(state, args)
     elif name == "/write":

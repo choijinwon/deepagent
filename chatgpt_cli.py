@@ -17,7 +17,15 @@ EXIT_INPUTS = {"q", "0", "quit", "exit", "/q", "/quit", "/exit", "종료", "종�
 def load_chat_runtime() -> dict[str, Any]:
     try:
         from app_closed import get_default_model
-        from chat_cli import ChatAgentCache, ChatState, load_prompt, read_paste, run_chat_interactive, save_last_prompt
+        from chat_cli import (
+            ChatAgentCache,
+            ChatState,
+            handle_scan_root_command,
+            load_prompt,
+            read_paste,
+            run_chat_interactive,
+            save_last_prompt,
+        )
     except ModuleNotFoundError as exc:
         print_status_line("필수 패키지를 찾을 수 없습니다.", "red")
         print(f"누락 모듈: {exc.name}")
@@ -36,6 +44,7 @@ def load_chat_runtime() -> dict[str, Any]:
         "read_paste": read_paste,
         "run_chat_interactive": run_chat_interactive,
         "save_last_prompt": save_last_prompt,
+        "handle_scan_root_command": handle_scan_root_command,
     }
 
 
@@ -58,6 +67,7 @@ def print_chatgpt_banner(state: Any) -> None:
                 "- 짧은 질문은 바로 입력하세요.",
                 "- 긴 프롬프트는 `p`를 누르고 여러 줄로 붙여넣으세요.",
                 "- 답변 생성 중에 새 프롬프트를 입력하면 대기열에 들어가고 순서대로 실행됩니다.",
+                "- `scan` 또는 `scan <폴더>`를 입력하면 Root 기준으로 파일을 스캔해 컨텍스트에 붙입니다.",
                 "- 마지막 답변에 사용한 프롬프트는 `s`로 저장할 수 있습니다.",
                 "- 종료는 `q`, `0`, `종료하기` 중 하나를 입력하세요.",
             ]
@@ -141,6 +151,7 @@ def prompt_menu(runner: PromptQueueRunner) -> str:
     print("p. 긴 프롬프트 붙여넣기")
     print("l. 저장 프롬프트 불러와 실행")
     print("s. 마지막 프롬프트 저장")
+    print("scan. Root 폴더 모두 스캔")
     print("r. 대기열 상태 보기")
     print("x. 대기열 비우기")
     print("c. 대화 초기화")
@@ -208,6 +219,10 @@ def main() -> None:
             continue
         if choice.lower() == "s":
             save_prompt_interactive(state, runtime)
+            continue
+        if choice.lower() == "scan" or choice.lower().startswith("scan "):
+            _, _, scan_path = choice.partition(" ")
+            runtime["handle_scan_root_command"](state, scan_path.strip())
             continue
         if choice.lower() == "l":
             prompt = load_prompt_interactive(runtime)
