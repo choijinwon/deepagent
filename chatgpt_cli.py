@@ -8,7 +8,7 @@ from typing import Any
 
 from dotenv import load_dotenv
 
-from ui_common import print_key_value_table, print_markdown_result, print_status_line
+from ui_common import console, print_markdown_result, print_status_line, rich_enabled
 
 
 EXIT_INPUTS = {"q", "0", "quit", "exit", "/q", "/quit", "/exit", "종료", "종료하기", "/종료", "/종료하기"}
@@ -49,15 +49,7 @@ def load_chat_runtime() -> dict[str, Any]:
 
 
 def print_chatgpt_banner(state: Any) -> None:
-    print_status_line("DeepAgent ChatGPT/Codex 스타일 채팅", "bold cyan")
-    print_key_value_table(
-        "현재 설정",
-        [
-            ("Model", state.model_name),
-            ("Workspace", str(state.workspace_dir)),
-            ("Multi Agent", "ON" if state.enable_multi_agent else "OFF"),
-        ],
-    )
+    print_chat_shell_header(state)
     print_markdown_result(
         "사용 방법",
         "\n".join(
@@ -74,6 +66,63 @@ def print_chatgpt_banner(state: Any) -> None:
         ),
         border_style="cyan",
     )
+
+
+def print_chat_shell_header(state: Any) -> None:
+    if rich_enabled():
+        from rich.panel import Panel
+        from rich.table import Table
+
+        table = Table.grid(expand=True)
+        table.add_column(ratio=1)
+        table.add_column(ratio=1)
+        table.add_row("[bold]DeepAgent Chat[/bold]", f"[cyan]{state.model_name}[/cyan]")
+        table.add_row("[dim]ChatGPT/Codex 스타일 터미널 챗봇[/dim]", f"Multi Agent: {'ON' if state.enable_multi_agent else 'OFF'}")
+        table.add_row("[dim]Root Workspace[/dim]", str(state.workspace_dir))
+        console.print(Panel(table, border_style="cyan", padding=(1, 2)))
+        return
+
+    print("")
+    print("=" * 78)
+    print("DeepAgent Chat - ChatGPT/Codex 스타일 터미널 챗봇")
+    print(f"Model       : {state.model_name}")
+    print(f"Workspace   : {state.workspace_dir}")
+    print(f"Multi Agent : {'ON' if state.enable_multi_agent else 'OFF'}")
+    print("=" * 78)
+
+
+def print_command_bar(runner: "PromptQueueRunner") -> None:
+    status = f"실행 중 · 대기 {runner.queue_size()}개" if runner.is_busy() else "대기 중"
+    commands = "1 질문 | p 긴 프롬프트 | scan Root 스캔 | l 불러오기 | s 저장 | r 대기열 | x 비우기 | h 도움말 | q 종료"
+    if rich_enabled():
+        from rich.panel import Panel
+
+        border_style = "yellow" if runner.is_busy() else "cyan"
+        body = f"[bold]{status}[/bold]\n[dim]{commands}[/dim]"
+        console.print(Panel(body, title="Chat Controls", border_style=border_style, padding=(0, 1), expand=False))
+        return
+
+    print("")
+    print(f"[{status}]")
+    print(commands)
+
+
+def print_user_bubble(prompt: str, *, queued: bool) -> None:
+    preview = prompt.strip()
+    if len(preview) > 800:
+        preview = preview[:800].rstrip() + "\n..."
+    title = "사용자 프롬프트 · 대기열 추가" if queued else "사용자 프롬프트"
+    if rich_enabled():
+        from rich.panel import Panel
+
+        console.print(Panel(preview, title=title, border_style="blue", padding=(1, 2), expand=False))
+        return
+
+    print("")
+    print(f"{title}>")
+    print("-" * 78)
+    print(preview)
+    print("-" * 78)
 
 
 class PromptQueueRunner:
@@ -144,21 +193,9 @@ class PromptQueueRunner:
 
 
 def prompt_menu(runner: PromptQueueRunner) -> str:
-    print("")
-    if runner.is_busy():
-        print(f"[실행 중] 새 프롬프트는 대기열에 추가됩니다. 대기: {runner.queue_size()}")
-    print("1. 바로 질문 입력")
-    print("p. 긴 프롬프트 붙여넣기")
-    print("l. 저장 프롬프트 불러와 실행")
-    print("s. 마지막 프롬프트 저장")
-    print("scan. Root 폴더 모두 스캔")
-    print("r. 대기열 상태 보기")
-    print("x. 대기열 비우기")
-    print("c. 대화 초기화")
-    print("h. 도움말")
-    print("0. 종료하기")
-    print("q. 종료하기")
-    return input("선택 또는 바로 질문 입력> ").strip()
+    print_command_bar(runner)
+    prompt_label = "대기열 입력> " if runner.is_busy() else "메시지 입력> "
+    return input(prompt_label).strip()
 
 
 def load_prompt_interactive(runtime: dict[str, Any]) -> str:
@@ -237,6 +274,7 @@ def main() -> None:
             prompt = choice
         if not prompt:
             continue
+        print_user_bubble(prompt, queued=runner.is_busy())
         runner.submit(prompt)
 
 
