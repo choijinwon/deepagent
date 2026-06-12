@@ -222,6 +222,7 @@ QWEN_API_KEY=your-internal-qwen-key
 QWEN_BASE_URL=http://xxx.xxx.xxx.xxx:포트/v1
 QWEN_MODEL=qwen3.5
 QWEN_MODELS=qwen3.5,gpt20,gamma
+DEEPAGENT_MESSAGES_MODE=string
 ENABLE_MULTI_AGENT=true
 ENABLE_HARNESS_SKILLS=true
 ENABLE_RICH_CONSOLE=true
@@ -271,6 +272,14 @@ ML_PLATFORM_PYTHON_VERSION=3.11
 ```ini
 QWEN_MODEL=qwen3.5
 ```
+
+최신 DeepAgents에서 `Run failed: string indices must be integers, not str` 오류가 나면 메시지 입력 포맷을 문자열 transcript 방식으로 두는 것이 안전합니다.
+
+```ini
+DEEPAGENT_MESSAGES_MODE=string
+```
+
+구버전 DeepAgents에서 LangChain 메시지 list 방식이 필요하면 `list`로 바꿀 수 있습니다.
 
 웹 화면에서 선택 가능한 모델 목록은 `QWEN_MODELS`에 쉼표로 등록합니다.
 

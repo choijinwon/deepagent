@@ -25,6 +25,7 @@ from scaffold_common import (
     scaffold_to_context_files,
 )
 from app_closed import (
+    build_agent_request,
     build_agent,
     get_available_models,
     get_default_model,
@@ -1150,11 +1151,27 @@ def format_agent_result(result) -> str:
         if messages:
             last_message = messages[-1]
             if isinstance(last_message, dict) and last_message.get("content"):
-                return str(last_message["content"])
+                return stringify_message_content(last_message["content"])
             content = getattr(last_message, "content", None)
             if content:
-                return str(content)
+                return stringify_message_content(content)
     return str(result)
+
+
+def stringify_message_content(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict):
+                text = item.get("text") or item.get("content") or item.get("value")
+                if text:
+                    parts.append(str(text))
+            elif item:
+                parts.append(str(item))
+        return "\n".join(parts)
+    return str(content)
 
 
 def extract_stream_text(chunk, depth: int = 0) -> str:
@@ -1635,17 +1652,7 @@ class AgentHandler(BaseHTTPRequestHandler):
 
             agent = self._get_agent(model_name, enable_multi_agent)
             files = build_context_files(payload, model_name=model_name, enable_multi_agent=enable_multi_agent)
-            response = agent.invoke(
-                {
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": prompt,
-                        }
-                    ],
-                    "files": files,
-                }
-            )
+            response = agent.invoke(build_agent_request(prompt, files))
             result_text = format_agent_result(response)
             wiki_path = None
             if self.path == "/api/run":
@@ -1785,7 +1792,7 @@ class AgentHandler(BaseHTTPRequestHandler):
                 enable_multi_agent=enable_multi_agent,
             )
         agent = self._get_agent(model_name, enable_multi_agent)
-        response = agent.invoke({"messages": [{"role": "user", "content": prompt}], "files": files})
+        response = agent.invoke(build_agent_request(prompt, files))
         result_text = format_agent_result(response)
         wiki_path = save_wiki_record(
             prompt=prompt,
@@ -1859,10 +1866,7 @@ class AgentHandler(BaseHTTPRequestHandler):
     ) -> None:
         self._send_sse("status", {"message": f"{model_name} 에이전트 준비 중..."})
         agent = self._get_agent(model_name, enable_multi_agent)
-        request = {
-            "messages": [{"role": "user", "content": prompt}],
-            "files": files,
-        }
+        request = build_agent_request(prompt, files)
 
         def send_delta(delta: str) -> None:
             for chunk in iter_text_chunks(delta):
@@ -1907,7 +1911,7 @@ class AgentHandler(BaseHTTPRequestHandler):
         for model_name in models:
             try:
                 agent = self._get_agent(model_name, enable_multi_agent)
-                response = agent.invoke({"messages": [{"role": "user", "content": prompt}], "files": files})
+                response = agent.invoke(build_agent_request(prompt, files))
                 results.append({"model": model_name, "ok": True, "result": format_agent_result(response)})
             except Exception as exc:
                 results.append({"model": model_name, "ok": False, "error": str(exc), "result": ""})

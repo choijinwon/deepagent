@@ -53,6 +53,7 @@ from scaffold_common import (
     scaffold_to_context_files,
 )
 from app_closed import (
+    build_agent_request,
     build_agent,
     get_available_models,
     get_default_model,
@@ -252,7 +253,7 @@ def print_status(state: ChatState) -> None:
             ("Attached Files", str(len(state.attached_files))),
             ("Goal", str(state.goal.get("title") or "none")),
             ("Plan", f"{state.plan_title or 'none'} ({len(state.plan_steps)} steps)"),
-            ("Turns", str(len([m for m in state.messages if m["role"] == "user"]))),
+            ("Turns", str(len([m for m in state.messages if isinstance(m, dict) and m.get("role") == "user"]))),
         ],
     )
 
@@ -296,10 +297,7 @@ def invoke_chat(
             multi_agent=state.enable_multi_agent,
         )
 
-    request = {
-        "messages": state.messages,
-        "files": files,
-    }
+    request = build_agent_request(state.messages, files)
     stream_view = MarkdownStream("assistant")
 
     def print_status(message: str) -> None:

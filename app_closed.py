@@ -29,6 +29,49 @@ def get_default_model() -> str:
     return os.getenv("QWEN_MODEL") or get_available_models()[0]
 
 
+def deepagent_messages_mode() -> str:
+    load_dotenv()
+    mode = os.getenv("DEEPAGENT_MESSAGES_MODE", "string").strip().lower()
+    return mode if mode in ("string", "list") else "string"
+
+
+def normalize_chat_messages(messages: list[dict[str, str]] | list | str) -> list[dict[str, str]]:
+    if isinstance(messages, str):
+        return [{"role": "user", "content": messages}]
+    normalized = []
+    for item in messages or []:
+        if isinstance(item, dict):
+            role = str(item.get("role") or "user")
+            content = str(item.get("content") or "")
+        else:
+            role = str(getattr(item, "type", "") or getattr(item, "role", "") or "user")
+            content = str(getattr(item, "content", item) or "")
+        if content:
+            normalized.append({"role": role, "content": content})
+    return normalized
+
+
+def messages_to_transcript(messages: list[dict[str, str]] | list | str) -> str:
+    normalized = normalize_chat_messages(messages)
+    lines = []
+    for message in normalized:
+        role = str(message.get("role") or "user")
+        content = str(message.get("content") or "")
+        lines.append(f"{role}:\n{content}")
+    return "\n\n".join(lines).strip()
+
+
+def build_agent_request(messages: list[dict[str, str]] | list | str, files: dict[str, str] | None = None) -> dict[str, Any]:
+    if deepagent_messages_mode() == "list":
+        request_messages: str | list[dict[str, str]] = normalize_chat_messages(messages)
+    else:
+        request_messages = messages_to_transcript(messages)
+    return {
+        "messages": request_messages,
+        "files": files or {},
+    }
+
+
 def build_qwen_llm(model_name: str | None = None) -> ChatOpenAI:
     load_dotenv()
 
@@ -150,15 +193,10 @@ def main() -> None:
 
     try:
         result = agent.invoke(
-            {
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": "서버 접근권한 보안 점검 TODO 만들어줘.",
-                    }
-                ],
-                "files": get_harness_skill_files(),
-            }
+            build_agent_request(
+                "서버 접근권한 보안 점검 TODO 만들어줘.",
+                get_harness_skill_files(),
+            )
         )
 
         print("\nQwen 3.5 에이전트 실행 결과:")
