@@ -18,6 +18,7 @@ deepagent/
 ├─ web_closed.py
 ├─ console_ui.py
 ├─ chat_cli.py
+├─ chatgpt_cli.py
 ├─ launcher_cli.py
 ├─ dev_common.py
 ├─ doctor.py
@@ -179,6 +180,8 @@ deepagent          # 선택 메뉴 런처
 deepagents         # 선택 메뉴 런처 별칭
 deepagent-menu     # 선택 메뉴 런처 별칭
 deepagent-chat     # 챗봇형 CLI 직접 실행
+deepagent-chatgpt  # ChatGPT/Codex 스타일 채팅
+deepagent-codex-chat # ChatGPT/Codex 스타일 채팅 별칭
 deepagent-project  # 질문형 프로젝트 생성 마법사
 deepagent-register-wizard # AI Studio 등록 위자드
 deepagent-fix-wizard # AI Studio 오류수정 위자드
@@ -470,7 +473,34 @@ deepagent-console
 ENABLE_RICH_CONSOLE=false
 ```
 
-## 9. 챗봇형 CLI로 실행
+## 9. ChatGPT/Codex 스타일 채팅으로 실행
+
+명령어를 잘 몰라도 프롬프트를 바로 작성하려면 아래 명령을 실행합니다.
+
+```powershell
+deepagent-chatgpt
+```
+
+또는 별칭을 사용할 수 있습니다.
+
+```powershell
+deepagent-codex-chat
+```
+
+지원하는 입력 방식:
+
+```text
+1. 바로 질문 입력
+p. 긴 프롬프트 붙여넣기
+l. 저장 프롬프트 불러와 실행
+s. 마지막 프롬프트 저장
+c. 대화 초기화
+q. 종료
+```
+
+짧은 질문은 선택 번호 없이 바로 입력해도 전송됩니다.
+
+## 10. 고급 챗봇형 CLI로 실행
 
 Claude 스타일의 대화형 CLI가 필요하면 아래 명령을 실행합니다.
 
@@ -676,7 +706,7 @@ ML_PLATFORM_PYTHON_VERSION=3.11
 `/goal save`로 저장한 목표도 Markdown 파일로 남고, 현재 목표는 다음 에이전트 호출에 `/goals/current-goal.md`로 자동 전달됩니다.
 `/session save`는 모델, 멀티에이전트 설정, 목표, 플랜, 첨부 파일 내용, 최근 대화를 JSON과 Markdown으로 저장합니다.
 
-## 10. 웹 없이 아이디어로 폴더/파일 자동 생성
+## 11. 웹 없이 아이디어로 폴더/파일 자동 생성
 
 웹 UI를 열지 않고 터미널에서 바로 폴더와 파일을 만들려면 `deepagent-scaffold` 명령을 사용합니다.
 이 기능은 LLM 호출 없이 입력한 Markdown 형식의 아이디어를 파싱해서 `agent_workspace/`, `plans/`, `goals/`, `sessions/`에 산출물을 생성합니다.
@@ -777,7 +807,7 @@ runbooks/vllm
 
 `model_catalog.json`은 모델 설명, 컨텍스트 길이, Tool Calling 확인 상태, 권장 temperature, 사용 사례를 기록하는 오프라인 모델 장부입니다.
 
-## 11. OpenCode IDE 기반 AI Studio 등록 자동화
+## 12. OpenCode IDE 기반 AI Studio 등록 자동화
 
 기존 ML 프로젝트를 분석해 AI Studio 등록에 필요한 초안 파일을 자동 생성합니다.
 1차 구현은 실제 플랫폼 API 호출 없이 오프라인 산출물 생성과 검증 중심입니다.
@@ -936,7 +966,7 @@ dev_patches/
 
 웹 UI에서는 `AI Studio 등록` 패널에 프로젝트 경로 또는 로그 파일 경로를 입력한 뒤 `등록 분석`, `등록 구조 생성`, `등록 패키지 생성`, `오류 로그 분석` 버튼을 사용합니다.
 
-## 12. 폐쇄망 진단
+## 13. 폐쇄망 진단
 
 Windows 11 폐쇄망 PC에서 설정 문제를 먼저 확인하려면 아래 명령을 실행합니다.
 
@@ -958,7 +988,7 @@ deepagent-doctor
 - `QWEN_BASE_URL`의 `/v1/models` 호출 확인
 - Tool Calling 설정 확인 안내
 
-## 13. 오프라인 번들 검증
+## 14. 오프라인 번들 검증
 
 외부 PC에서 `prepare_external_pc.ps1`을 실행하면 `offline_bundle/bundle_manifest.json`이 함께 생성됩니다.
 폐쇄망 PC로 복사한 뒤 아래 명령으로 필수 파일 누락 여부를 확인합니다.

@@ -6,15 +6,16 @@ from ui_common import print_markdown_result, print_status_line, rich_enabled
 
 
 MENU = [
-    ("1", "chat", "챗봇형 CLI", "deepagent-chat", "chat_cli"),
-    ("2", "project", "질문형 프로젝트 생성", "deepagent-project", "project_wizard"),
-    ("3", "web", "웹 UI", "deepagent-web", "web_closed"),
-    ("4", "console", "메뉴형 콘솔 UI", "deepagent-console", "console_ui"),
-    ("5", "scaffold", "아이디어로 폴더/파일 생성", "deepagent-scaffold", "scaffold_cli"),
-    ("6", "register", "AI Studio 등록 위자드", "deepagent-register-wizard", "registration_wizard"),
-    ("7", "fix", "AI Studio 오류수정 위자드", "deepagent-fix-wizard", "fix_wizard"),
-    ("8", "doctor", "폐쇄망 환경 진단", "deepagent-doctor", "doctor"),
-    ("9", "run", "기본 단발 실행 테스트", "deepagent-run", "app_closed"),
+    ("1", "chat", "ChatGPT/Codex 스타일 채팅", "deepagent-chatgpt", "chatgpt_cli"),
+    ("2", "cli", "고급 챗봇형 CLI", "deepagent-chat", "chat_cli"),
+    ("3", "project", "질문형 프로젝트 생성", "deepagent-project", "project_wizard"),
+    ("4", "web", "웹 UI", "deepagent-web", "web_closed"),
+    ("5", "console", "메뉴형 콘솔 UI", "deepagent-console", "console_ui"),
+    ("6", "scaffold", "아이디어로 폴더/파일 생성", "deepagent-scaffold", "scaffold_cli"),
+    ("7", "register", "AI Studio 등록 위자드", "deepagent-register-wizard", "registration_wizard"),
+    ("8", "fix", "AI Studio 오류수정 위자드", "deepagent-fix-wizard", "fix_wizard"),
+    ("9", "doctor", "폐쇄망 환경 진단", "deepagent-doctor", "doctor"),
+    ("10", "run", "기본 단발 실행 테스트", "deepagent-run", "app_closed"),
 ]
 
 ONBOARDING = [
@@ -50,8 +51,8 @@ ONBOARDING = [
         "5",
         "develop",
         "아이디어로 프로젝트를 만들고 개발하고 싶어요",
-        "project_wizard",
-        "질문형 프로젝트 생성 후 CLI/콘솔에서 실행, 오류 분석, 재테스트",
+        "chatgpt_cli",
+        "ChatGPT/Codex 스타일 채팅에서 아이디어를 쓰고 프로젝트 생성/수정 요청",
     ),
     (
         "6",
@@ -139,6 +140,8 @@ def module_for_onboarding_choice(value: str) -> tuple[str, str] | None:
 def dispatch(module_name: str) -> None:
     if module_name == "chat_cli":
         from chat_cli import main
+    elif module_name == "chatgpt_cli":
+        from chatgpt_cli import main
     elif module_name == "web_closed":
         from web_closed import main
     elif module_name == "console_ui":

@@ -21,6 +21,7 @@ $RequiredProjectFiles = @(
     "web_closed.py",
     "console_ui.py",
     "chat_cli.py",
+    "chatgpt_cli.py",
     "launcher_cli.py",
     "dev_common.py",
     "doctor.py",

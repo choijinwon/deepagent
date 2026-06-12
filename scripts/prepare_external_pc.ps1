@@ -33,6 +33,7 @@ Copy-Item -Force (Join-Path $Root "app_closed.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "web_closed.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "console_ui.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "chat_cli.py") $BundleProjectDir
+Copy-Item -Force (Join-Path $Root "chatgpt_cli.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "launcher_cli.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "dev_common.py") $BundleProjectDir
 Copy-Item -Force (Join-Path $Root "doctor.py") $BundleProjectDir
