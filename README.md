@@ -280,6 +280,7 @@ DEEPAGENT_MESSAGES_MODE=string
 ```
 
 구버전 DeepAgents에서 LangChain 메시지 list 방식이 필요하면 `list`로 바꿀 수 있습니다.
+실행 중 메시지 포맷 오류가 감지되면 `string`과 `list` 포맷을 자동으로 한 번 교차 재시도합니다.
 
 웹 화면에서 선택 가능한 모델 목록은 `QWEN_MODELS`에 쉼표로 등록합니다.
 

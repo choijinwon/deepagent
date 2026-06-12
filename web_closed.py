@@ -25,6 +25,7 @@ from scaffold_common import (
     scaffold_to_context_files,
 )
 from app_closed import (
+    build_alternate_agent_request,
     build_agent_request,
     build_agent,
     get_available_models,
@@ -32,6 +33,8 @@ from app_closed import (
     get_harness_skill_files,
     get_harness_skill_names,
     harness_skills_enabled,
+    invoke_agent_compatible,
+    is_message_format_error,
 )
 from dotenv import load_dotenv
 
@@ -1215,12 +1218,20 @@ def iter_text_chunks(value: str, chunk_size: int = STREAM_CHUNK_CHARS):
         yield text[index : index + chunk_size]
 
 
-def invoke_agent_text(agent, request: dict, on_delta=None, on_status=None) -> tuple[str, bool]:
+def invoke_agent_text(agent, request: dict, on_delta=None, on_status=None, allow_format_retry: bool = True) -> tuple[str, bool]:
+    alternate_request = build_alternate_agent_request(request) if allow_format_retry else None
     stream = getattr(agent, "stream", None)
     if not callable(stream):
         if on_status:
             on_status("모델 응답 대기 중...")
-        return format_agent_result(agent.invoke(request)), False
+        try:
+            return format_agent_result(agent.invoke(request)), False
+        except Exception as exc:
+            if alternate_request is None or not is_message_format_error(exc):
+                raise
+            if on_status:
+                on_status("메시지 포맷 호환 재시도 중...")
+            return format_agent_result(agent.invoke(alternate_request)), False
 
     last_chunk = None
     last_text = ""
@@ -1251,12 +1262,29 @@ def invoke_agent_text(agent, request: dict, on_delta=None, on_status=None) -> tu
         if last_chunk is not None:
             return format_agent_result(last_chunk), False
     except Exception as exc:
+        if alternate_request is not None and is_message_format_error(exc):
+            if on_status:
+                on_status("메시지 포맷 호환 재시도 중...")
+            return invoke_agent_text(
+                agent,
+                alternate_request,
+                on_delta=on_delta,
+                on_status=on_status,
+                allow_format_retry=False,
+            )
         if on_status:
             on_status(f"스트림 수신 실패, 일반 호출로 전환: {exc}")
 
     if on_status:
         on_status("일반 호출로 최종 응답 대기 중...")
-    return format_agent_result(agent.invoke(request)), False
+    try:
+        return format_agent_result(agent.invoke(request)), False
+    except Exception as exc:
+        if alternate_request is None or not is_message_format_error(exc):
+            raise
+        if on_status:
+            on_status("메시지 포맷 호환 재시도 중...")
+        return format_agent_result(agent.invoke(alternate_request)), False
 
 
 def load_prompt_store() -> list[dict[str, str]]:
@@ -1652,7 +1680,7 @@ class AgentHandler(BaseHTTPRequestHandler):
 
             agent = self._get_agent(model_name, enable_multi_agent)
             files = build_context_files(payload, model_name=model_name, enable_multi_agent=enable_multi_agent)
-            response = agent.invoke(build_agent_request(prompt, files))
+            response = invoke_agent_compatible(agent, prompt, files)
             result_text = format_agent_result(response)
             wiki_path = None
             if self.path == "/api/run":
@@ -1792,7 +1820,7 @@ class AgentHandler(BaseHTTPRequestHandler):
                 enable_multi_agent=enable_multi_agent,
             )
         agent = self._get_agent(model_name, enable_multi_agent)
-        response = agent.invoke(build_agent_request(prompt, files))
+        response = invoke_agent_compatible(agent, prompt, files)
         result_text = format_agent_result(response)
         wiki_path = save_wiki_record(
             prompt=prompt,
@@ -1911,7 +1939,7 @@ class AgentHandler(BaseHTTPRequestHandler):
         for model_name in models:
             try:
                 agent = self._get_agent(model_name, enable_multi_agent)
-                response = agent.invoke(build_agent_request(prompt, files))
+                response = invoke_agent_compatible(agent, prompt, files)
                 results.append({"model": model_name, "ok": True, "result": format_agent_result(response)})
             except Exception as exc:
                 results.append({"model": model_name, "ok": False, "error": str(exc), "result": ""})

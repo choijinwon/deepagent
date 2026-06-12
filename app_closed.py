@@ -62,7 +62,15 @@ def messages_to_transcript(messages: list[dict[str, str]] | list | str) -> str:
 
 
 def build_agent_request(messages: list[dict[str, str]] | list | str, files: dict[str, str] | None = None) -> dict[str, Any]:
-    if deepagent_messages_mode() == "list":
+    return build_agent_request_for_mode(messages, files, deepagent_messages_mode())
+
+
+def build_agent_request_for_mode(
+    messages: list[dict[str, str]] | list | str,
+    files: dict[str, str] | None = None,
+    mode: str = "string",
+) -> dict[str, Any]:
+    if mode == "list":
         request_messages: str | list[dict[str, str]] = normalize_chat_messages(messages)
     else:
         request_messages = messages_to_transcript(messages)
@@ -70,6 +78,38 @@ def build_agent_request(messages: list[dict[str, str]] | list | str, files: dict
         "messages": request_messages,
         "files": files or {},
     }
+
+
+def opposite_messages_mode(mode: str) -> str:
+    return "list" if mode == "string" else "string"
+
+
+def is_message_format_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return (
+        "string indices must be integers" in text
+        or "list indices must be integers" in text
+        or "message" in text and "content" in text and "dict" in text
+    )
+
+
+def build_alternate_agent_request(request: dict[str, Any]) -> dict[str, Any]:
+    files = dict(request.get("files") or {})
+    messages = request.get("messages", "")
+    if isinstance(messages, str):
+        return build_agent_request_for_mode(messages, files, "list")
+    return build_agent_request_for_mode(messages, files, "string")
+
+
+def invoke_agent_compatible(agent, messages: list[dict[str, str]] | list | str, files: dict[str, str] | None = None):
+    mode = deepagent_messages_mode()
+    request = build_agent_request_for_mode(messages, files, mode)
+    try:
+        return agent.invoke(request)
+    except Exception as exc:
+        if not is_message_format_error(exc):
+            raise
+        return agent.invoke(build_agent_request_for_mode(messages, files, opposite_messages_mode(mode)))
 
 
 def build_qwen_llm(model_name: str | None = None) -> ChatOpenAI:
@@ -192,11 +232,10 @@ def main() -> None:
     print(f"하네스 스킬: {', '.join(get_harness_skill_names()) or '미사용'}")
 
     try:
-        result = agent.invoke(
-            build_agent_request(
-                "서버 접근권한 보안 점검 TODO 만들어줘.",
-                get_harness_skill_files(),
-            )
+        result = invoke_agent_compatible(
+            agent,
+            "서버 접근권한 보안 점검 TODO 만들어줘.",
+            get_harness_skill_files(),
         )
 
         print("\nQwen 3.5 에이전트 실행 결과:")
